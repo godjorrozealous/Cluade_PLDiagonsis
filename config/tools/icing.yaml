@@ -1,0 +1,34 @@
+tool:
+  name: "IcingDiagnosisTool"
+  display_name: "覆冰监测"
+  description: "查询线路走廊气象数据，分析覆冰风险"
+  category: "environmental"
+  adapter:
+    type: "mcp"
+    config:
+      mcp_server: "weather-mcp-server"
+      tool_name: "query_icing"
+      # 可选：配置真实 MCP 服务器 URL
+      # 未配置时使用模拟数据（开发阶段）
+      # mcp_server_url: "http://localhost:3002"
+  output_schema:
+    type: "structured"
+    fields:
+      - name: "temperature"
+        type: "float"
+        description: "温度(°C)"
+      - name: "humidity"
+        type: "float"
+        description: "湿度(%)"
+      - name: "wind_speed"
+        type: "float"
+        description: "风速(m/s)"
+      - name: "icing_thickness"
+        type: "float"
+        description: "覆冰厚度(mm)"
+      - name: "icing_risk_level"
+        type: "string"
+        description: "覆冰风险等级"
+  report_mapping:
+    chapter: "诊断证据"
+    render_template: "table"

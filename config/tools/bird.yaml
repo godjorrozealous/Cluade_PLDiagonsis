@@ -1,0 +1,31 @@
+tool:
+  name: "BirdDamageDiagnosisTool"
+  display_name: "鸟害监测"
+  description: "查询线路走廊鸟类活动数据，分析鸟害风险"
+  category: "biological"
+  adapter:
+    type: "mcp"
+    config:
+      mcp_server: "ecology-mcp-server"
+      tool_name: "query_bird_activity"
+      # 可选：配置真实 MCP 服务器 URL
+      # 未配置时使用模拟数据（开发阶段）
+      # mcp_server_url: "http://localhost:3004"
+  output_schema:
+    type: "structured"
+    fields:
+      - name: "bird_species_count"
+        type: "int"
+        description: "鸟类种类数"
+      - name: "activity_level"
+        type: "string"
+        description: "活动强度"
+      - name: "nesting_sites"
+        type: "int"
+        description: "鸟巢数量"
+      - name: "damage_history"
+        type: "string"
+        description: "历史鸟害记录"
+  report_mapping:
+    chapter: "诊断证据"
+    render_template: "table"
