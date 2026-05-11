@@ -6,6 +6,7 @@ from typing import AsyncIterator
 from src.core.models import (
     DiagnosisContext,
     DiagnosisSession,
+    DiagnosisSummary,
     Event,
     ExecutionContext,
     FaultContext,
@@ -13,12 +14,15 @@ from src.core.models import (
 )
 from src.core.exceptions import InvalidStateError
 from src.application.commands.base import Command
+from src.domain.diagnosis_planner import DiagnosisPlanner
+from src.domain.prompt_builder import PromptBuilder
+from src.domain.report_composer import ReportComposer
+from src.domain.skill_loader import SkillLoader
+from src.domain.tool_executor import ToolExecutor
 from src.infrastructure.adapters.registry import ToolRegistry
 from src.infrastructure.event_bus import EventBus
-from src.domain.report_engine import ReportEngine
 from src.domain.session_manager import SessionManager
 from src.domain.state_machine import StateMachine
-from src.domain.weight_engine import WeightEngine
 
 logger = logging.getLogger(__name__)
 
@@ -29,18 +33,24 @@ class DiagnoseCommand(Command):
     def __init__(
         self,
         tool_registry: ToolRegistry,
-        weight_engine: WeightEngine,
-        report_engine: ReportEngine,
         session_manager: SessionManager,
         state_machine: StateMachine,
         event_bus: EventBus,
+        skill_loader: SkillLoader,
+        prompt_builder: PromptBuilder,
+        diagnosis_planner: DiagnosisPlanner,
+        tool_executor: ToolExecutor,
+        report_composer: ReportComposer,
     ):
         self.tool_registry = tool_registry
-        self.weight_engine = weight_engine
-        self.report_engine = report_engine
         self.session_manager = session_manager
         self.state_machine = state_machine
         self.event_bus = event_bus
+        self.skill_loader = skill_loader
+        self.prompt_builder = prompt_builder
+        self.diagnosis_planner = diagnosis_planner
+        self.tool_executor = tool_executor
+        self.report_composer = report_composer
 
     async def execute(self, ctx: ExecutionContext) -> AsyncIterator[Event]:
         """执行诊断"""
@@ -56,59 +66,79 @@ class DiagnoseCommand(Command):
 
         # 2. 解析故障上下文
         fault_context = self._parse_fault_context(ctx.user_message, session)
-        yield Event.thinking(session.session_id, f"解析线路信息: {fault_context.line_name}")
+        yield Event.thinking(
+            session.session_id, f"解析线路信息: {fault_context.line_name}"
+        )
 
-        # 3. 转换状态
-        self.session_manager.transition(session.session_id, SessionStatus.DIAGNOSING)
+        # 3. 加载诊断技能
+        yield Event.thinking(session.session_id, "加载诊断技能...")
+        skill_name = session.active_skill_name or "comprehensive_diagnosis"
+        skill_md = self.skill_loader.load(skill_name)
 
-        # 4. 获取可用工具（排除 excluded_tools）
-        all_tools = self.tool_registry.list_tool_names()
-        available_tools = [
-            t for t in all_tools if t not in ctx.diagnosis_ctx.excluded_tools
-        ]
+        # 4. 扫描诊断工具
+        yield Event.thinking(session.session_id, "扫描诊断工具...")
+        available_tools = self.tool_registry.list_tools()
+
+        # 5. 构建诊断计划
+        yield Event.thinking(session.session_id, "构建诊断计划...")
+        prompt = self.prompt_builder.build(
+            skill_md, session, available_tools, ctx.user_message
+        )
+
+        # 6. AI 制定诊断方案
+        yield Event.thinking(session.session_id, "AI 正在制定诊断方案...")
+        plan = await self.diagnosis_planner.plan(prompt)
+        tool_names = [t["name"] for t in plan.get("tools_to_call", [])]
         yield Event.thinking(
             session.session_id,
-            f"调用诊断工具: {', '.join(available_tools)}",
+            f"诊断计划: 调用 {', '.join(tool_names)} | "
+            f"报告结构: {', '.join(plan.get('report_structure', []))}",
         )
 
-        # 5. 并行执行工具
-        tool_outputs = await self.tool_registry.execute_parallel(
-            available_tools, fault_context
+        # 7. 执行诊断工具
+        yield Event.thinking(session.session_id, "执行诊断工具...")
+        diagnosis_ctx = DiagnosisContext(
+            session_id=session.session_id,
+            line_name=session.line_name,
         )
-        yield Event.result(session.session_id, {"tool_count": len(tool_outputs)})
+        tool_outputs = await self.tool_executor.execute(plan, diagnosis_ctx)
 
-        # 6. 加权分析
-        yield Event.thinking(session.session_id, "综合加权分析中...")
-        weights = ctx.diagnosis_ctx.weights or session.active_weights
-        summary = self.weight_engine.compute(tool_outputs, weights)
+        # 8. 输出每个工具的结果
+        for name, output in tool_outputs.items():
+            yield Event.result(
+                session.session_id,
+                {"tool": name, "output": output.model_dump()},
+            )
 
-        # 7. 生成报告（ReportEngine 会自动使用默认章节）
+        # 9. 生成诊断报告
         yield Event.thinking(session.session_id, "生成诊断报告...")
-        from src.core.models import TemplateConfig
-        template = TemplateConfig(name="default")
-        report = await self.report_engine.generate(
-            summary, template, tool_outputs, session.session_id
+        report = await self.report_composer.compose(
+            tool_outputs, None, session.session_id
         )
 
-        # 8. 保存结果
-        summary.fault_context = fault_context
+        # 10. 创建诊断摘要并保存到会话
+        summary = DiagnosisSummary(
+            fault_context=fault_context,
+        )
         self.session_manager.add_summary(session.session_id, summary)
-        self.session_manager.transition(session.session_id, SessionStatus.MODIFYING)
+
+        # 11. 转换到完成状态
+        self.session_manager.transition(
+            session.session_id, SessionStatus.COMPLETED
+        )
 
         yield Event.complete(
             session.session_id,
             {
                 "report": report,
-                "primary_diagnosis": summary.primary_diagnosis.fault_type
-                if summary.primary_diagnosis
-                else "未知",
-                "confidence": summary.primary_diagnosis.confidence
-                if summary.primary_diagnosis
-                else 0,
+                "primary_diagnosis": "未知",
+                "confidence": 0,
             },
         )
 
-    def _parse_fault_context(self, message: str, session: DiagnosisSession) -> FaultContext:
+    def _parse_fault_context(
+        self, message: str, session: DiagnosisSession
+    ) -> FaultContext:
         """解析故障上下文"""
         from src.infrastructure.fault_parser import FaultContextParser
 
