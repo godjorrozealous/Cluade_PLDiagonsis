@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from src.core.config import AppConfig
+from src.core.config import AppConfig, LLMConfig
 from src.infrastructure.event_bus import EventBus
 from src.infrastructure.llm_service import LLMService
 from src.infrastructure.adapters.registry import ToolRegistry
@@ -19,6 +19,11 @@ from src.domain.session_manager import SessionManager
 from src.domain.intent_classifier import IntentClassifier
 from src.domain.weight_engine import WeightEngine
 from src.domain.report_engine import ReportEngine
+from src.domain.skill_loader import SkillLoader
+from src.domain.prompt_builder import PromptBuilder
+from src.domain.diagnosis_planner import DiagnosisPlanner
+from src.domain.tool_executor import ToolExecutor
+from src.domain.report_composer import ReportComposer
 
 
 class Container:
@@ -42,6 +47,11 @@ class Container:
         )
         self.report_engine = ReportEngine(self.llm_service, self.event_bus)
         self.template_parser = TemplateParser()
+        self.skill_loader = SkillLoader()
+        self.prompt_builder = PromptBuilder()
+        self.diagnosis_planner = DiagnosisPlanner(self.llm_service)
+        self.tool_executor = ToolExecutor(self.tool_registry)
+        self.report_composer = ReportComposer(self.llm_service)
 
     def _merge_yaml_config(self) -> None:
         """合并 config.yaml 中的配置（环境变量优先）"""
@@ -55,6 +65,16 @@ class Container:
             return
         if not data:
             return
+
+        # 合并 llm 配置（环境变量优先，但 config.yaml 覆盖默认值）
+        if "llm" in data:
+            llm_data = data["llm"]
+            for key, value in llm_data.items():
+                # 仅当环境变量未提供时，使用 config.yaml 的值
+                env_val = getattr(self.config.llm, key, None)
+                if env_val is None or env_val == LLMConfig.model_fields[key].default:
+                    if hasattr(self.config.llm, key):
+                        setattr(self.config.llm, key, value)
 
         # 合并 report.chapter_types（仅当当前为空时）
         if "report" in data and "chapter_types" in data["report"]:
