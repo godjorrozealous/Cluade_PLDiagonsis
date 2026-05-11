@@ -37,33 +37,30 @@ export function getTools() {
   return request<{ tools: ToolInfo[] }>('/api/tools')
 }
 
-export interface StrategyInfo {
+export interface SkillInfo {
   name: string
   description: string
-  created_at: string
-  tool_weights: Record<string, number>
-  excluded_tools: string[]
 }
 
-export function getStrategies() {
-  return request<{ strategies: StrategyInfo[] }>('/api/skills')
+export function getSkills() {
+  return request<{ skills: SkillInfo[] }>('/api/skills')
 }
 
-export function activateStrategy(name: string) {
-  return request<{ success: boolean; strategy_name: string; applied_weights: Record<string, number>; applied_exclusions: string[] }>(
+export function activateSkill(name: string) {
+  return request<{ success: boolean; skill_name: string; message: string }>(
     `/api/skills/${encodeURIComponent(name)}/activate`,
     { method: 'POST' }
   )
 }
 
-export function deleteStrategy(name: string) {
+export function deleteSkill(name: string) {
   return request<{ success: boolean; message: string }>(
     `/api/skills/${encodeURIComponent(name)}`,
     { method: 'DELETE' }
   )
 }
 
-export function resetStrategies() {
+export function resetSkills() {
   return request<{ success: boolean; message: string; default_weights: Record<string, number> }>(
     '/api/skills/reset',
     { method: 'POST' }

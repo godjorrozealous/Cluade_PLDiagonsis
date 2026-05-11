@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getStrategies, activateStrategy, deleteStrategy, resetStrategies } from '@/api/http'
-import type { StrategyInfo } from '@/api/http'
+import { getSkills, activateSkill, deleteSkill, resetSkills } from '@/api/http'
+import type { SkillInfo } from '@/api/http'
 
-const strategies = ref<StrategyInfo[]>([])
+const skills = ref<SkillInfo[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 const activeName = ref<string | null>(null)
 
-async function loadStrategies() {
+async function loadSkills() {
   loading.value = true
   error.value = null
   try {
-    const data = await getStrategies()
-    strategies.value = data.strategies
+    const data = await getSkills()
+    skills.value = data.skills
   } catch (err) {
     error.value = (err as Error).message
   } finally {
@@ -24,7 +24,7 @@ async function loadStrategies() {
 async function handleActivate(name: string) {
   try {
     error.value = null
-    await activateStrategy(name)
+    await activateSkill(name)
     activeName.value = name
   } catch (err) {
     error.value = (err as Error).message
@@ -32,12 +32,12 @@ async function handleActivate(name: string) {
 }
 
 async function handleDelete(name: string) {
-  if (!confirm(`确定删除策略 "${name}" 吗？`)) return
+  if (!confirm(`确定删除技能 "${name}" 吗？`)) return
   try {
     error.value = null
-    await deleteStrategy(name)
+    await deleteSkill(name)
     if (activeName.value === name) activeName.value = null
-    await loadStrategies()
+    await loadSkills()
   } catch (err) {
     error.value = (err as Error).message
   }
@@ -46,7 +46,7 @@ async function handleDelete(name: string) {
 async function handleReset() {
   try {
     error.value = null
-    await resetStrategies()
+    await resetSkills()
     activeName.value = null
   } catch (err) {
     error.value = (err as Error).message
@@ -54,32 +54,32 @@ async function handleReset() {
 }
 
 onMounted(() => {
-  loadStrategies()
+  loadSkills()
 })
 </script>
 
 <template>
-  <section class="strategy-panel">
-    <header class="strategy-header">
-      <h3>策略管理</h3>
-      <div class="strategy-actions">
-        <button class="icon-btn" @click="loadStrategies" title="刷新">&#x21bb;</button>
+  <section class="skill-panel">
+    <header class="skill-header">
+      <h3>技能管理</h3>
+      <div class="skill-actions">
+        <button class="icon-btn" @click="loadSkills" title="刷新">&#x21bb;</button>
         <button class="icon-btn" @click="handleReset" title="重置为默认">&#x21ba;</button>
       </div>
     </header>
 
-    <ul v-if="strategies.length > 0" class="strategy-list">
+    <ul v-if="skills.length > 0" class="skill-list">
       <li
-        v-for="s in strategies"
+        v-for="s in skills"
         :key="s.name"
-        class="strategy-item"
+        class="skill-item"
         :class="{ active: activeName === s.name }"
       >
-        <div class="strategy-info">
-          <div class="strategy-name">{{ s.name }}</div>
-          <div class="strategy-desc">{{ s.description || '无描述' }}</div>
+        <div class="skill-info">
+          <div class="skill-name">{{ s.name }}</div>
+          <div class="skill-desc">{{ s.description || '无描述' }}</div>
         </div>
-        <div class="strategy-actions">
+        <div class="skill-actions">
           <button
             class="activate-btn"
             :class="{ activated: activeName === s.name }"
@@ -92,17 +92,17 @@ onMounted(() => {
       </li>
     </ul>
 
-    <div v-else-if="loading" class="strategy-empty">加载中...</div>
-    <div v-else-if="error" class="strategy-error">{{ error }}</div>
-    <div v-else class="strategy-empty">
-      暂无策略
-      <p class="hint">在对话中输入"保存策略 [名称]"来创建</p>
+    <div v-else-if="loading" class="skill-empty">加载中...</div>
+    <div v-else-if="error" class="skill-error">{{ error }}</div>
+    <div v-else class="skill-empty">
+      暂无技能
+      <p class="hint">在对话中输入"保存为 [名称] 技能"来创建</p>
     </div>
   </section>
 </template>
 
 <style scoped>
-.strategy-panel {
+.skill-panel {
   width: 280px;
   min-width: 280px;
   background: #fff;
@@ -111,7 +111,7 @@ onMounted(() => {
   flex-direction: column;
 }
 
-.strategy-header {
+.skill-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -119,14 +119,14 @@ onMounted(() => {
   border-bottom: 1px solid #e2e8f0;
 }
 
-.strategy-header h3 {
+.skill-header h3 {
   margin: 0;
   font-size: 0.9375rem;
   font-weight: 600;
   color: #0f172a;
 }
 
-.strategy-actions {
+.skill-actions {
   display: flex;
   gap: 0.25rem;
 }
@@ -145,7 +145,7 @@ onMounted(() => {
   color: #0f172a;
 }
 
-.strategy-list {
+.skill-list {
   list-style: none;
   margin: 0;
   padding: 0.75rem;
@@ -153,7 +153,7 @@ onMounted(() => {
   flex: 1;
 }
 
-.strategy-item {
+.skill-item {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -165,18 +165,18 @@ onMounted(() => {
   transition: border-color 0.15s;
 }
 
-.strategy-item.active {
+.skill-item.active {
   border-color: #0f172a;
   background: #f8fafc;
 }
 
-.strategy-name {
+.skill-name {
   font-weight: 500;
   font-size: 0.875rem;
   color: #0f172a;
 }
 
-.strategy-desc {
+.skill-desc {
   font-size: 0.75rem;
   color: #64748b;
   margin-top: 0.25rem;
@@ -220,8 +220,8 @@ onMounted(() => {
   color: #ef4444;
 }
 
-.strategy-empty,
-.strategy-error {
+.skill-empty,
+.skill-error {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -233,7 +233,7 @@ onMounted(() => {
   text-align: center;
 }
 
-.strategy-error {
+.skill-error {
   color: #ef4444;
 }
 

@@ -15,13 +15,26 @@ class TestListSkills:
         with app.test_client() as client:
             yield client
 
-    def test_list_skills_empty(self, client):
+    def test_list_skills_empty(self, client, tmp_path):
         """GET /api/skills returns empty list when no skills exist."""
-        resp = client.get("/api/skills")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "skills" in data
-        assert data["skills"] == []
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+
+        from src.interfaces.dependency_injection import get_container
+
+        container = get_container()
+        original_dir = container.skill_loader._skills_dir
+        container.skill_loader._skills_dir = skills_dir
+        container.skill_loader._cache.clear()
+        try:
+            resp = client.get("/api/skills")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "skills" in data
+            assert data["skills"] == []
+        finally:
+            container.skill_loader._skills_dir = original_dir
+            container.skill_loader._cache.clear()
 
     def test_list_skills_returns_saved(self, client, tmp_path):
         """GET /api/skills returns skills from skills/ directory."""
