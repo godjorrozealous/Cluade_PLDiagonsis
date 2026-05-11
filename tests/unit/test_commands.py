@@ -357,25 +357,37 @@ async def test_save_strategy_invalid_state(save_strategy_command: SaveStrategyCo
 def diagnose_command() -> DiagnoseCommand:
     """Return a DiagnoseCommand with mocked dependencies."""
     mock_registry = MagicMock()
-    mock_weight_engine = MagicMock()
-    mock_report_engine = AsyncMock()
     mock_session_manager = MagicMock()
     mock_state_machine = MagicMock()
     mock_event_bus = MagicMock()
+    mock_skill_loader = MagicMock()
+    mock_prompt_builder = MagicMock()
+    mock_diagnosis_planner = AsyncMock()
+    mock_tool_executor = AsyncMock()
+    mock_report_composer = AsyncMock()
+
     mock_state_machine.can_execute.return_value = True
-    mock_registry.list_tool_names.return_value = ["ToolA", "ToolB"]
-    mock_registry.execute_parallel = AsyncMock(return_value={
+    mock_registry.list_tools.return_value = []
+    mock_skill_loader.load.return_value = "# skill"
+    mock_prompt_builder.build.return_value = "prompt"
+    mock_diagnosis_planner.plan.return_value = {
+        "tools_to_call": [{"name": "ToolA", "rationale": "test", "parallel": True}],
+        "report_structure": ["概述"],
+    }
+    mock_tool_executor.execute.return_value = {
         "ToolA": ToolOutput(tool_name="ToolA", raw_text="ok"),
-    })
-    mock_weight_engine.compute.return_value = DiagnosisSummary()
-    mock_report_engine.generate = AsyncMock(return_value="# report")
+    }
+    mock_report_composer.compose.return_value = "# report"
     return DiagnoseCommand(
         mock_registry,
-        mock_weight_engine,
-        mock_report_engine,
         mock_session_manager,
         mock_state_machine,
         mock_event_bus,
+        mock_skill_loader,
+        mock_prompt_builder,
+        mock_diagnosis_planner,
+        mock_tool_executor,
+        mock_report_composer,
     )
 
 
@@ -391,7 +403,7 @@ async def test_diagnose_success(diagnose_command: DiagnoseCommand) -> None:
     assert any(e.event_type == EventType.THINKING for e in events)
     assert events[-1].event_type == EventType.COMPLETE
     diagnose_command.session_manager.add_summary.assert_called_once()
-    diagnose_command.session_manager.transition.assert_called_with("s1", SessionStatus.MODIFYING)
+    diagnose_command.session_manager.transition.assert_called_with("s1", SessionStatus.COMPLETED)
 
 
 @pytest.mark.asyncio
