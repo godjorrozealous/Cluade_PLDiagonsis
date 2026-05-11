@@ -16,50 +16,39 @@ class TestListSkills:
             yield client
 
     def test_list_skills_empty(self, client):
-        """GET /api/skills returns empty list when no strategies exist."""
+        """GET /api/skills returns empty list when no skills exist."""
         resp = client.get("/api/skills")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "strategies" in data
-        assert data["strategies"] == []
+        assert "skills" in data
+        assert data["skills"] == []
 
     def test_list_skills_returns_saved(self, client, tmp_path):
-        """GET /api/skills returns strategies from skills/ directory."""
+        """GET /api/skills returns skills from skills/ directory."""
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        strategy_file = skills_dir / "my_strategy.json"
-        strategy_file.write_text(
-            json.dumps(
-                {
-                    "name": "my_strategy",
-                    "description": "Test strategy",
-                    "created_at": "2025-05-11T10:00:00",
-                    "tool_weights": {"LightningDiagnosisTool": 1.5},
-                    "excluded_tools": ["WindDiagnosisTool"],
-                }
-            ),
+        skill_file = skills_dir / "my_skill.md"
+        skill_file.write_text(
+            "# Test Skill\n\n## 描述\n\nA test skill for diagnosis.\n",
             encoding="utf-8",
         )
 
-        # Patch the skills directory via monkeypatch on Path.glob
-        original_glob = Path.glob
+        from src.interfaces.dependency_injection import get_container
 
-        def patched_glob(self, pattern):
-            if str(self) == "skills" and pattern == "*.json":
-                return list(skills_dir.glob("*.json"))
-            return original_glob(self, pattern)
-
-        Path.glob = patched_glob
+        container = get_container()
+        original_dir = container.skill_loader._skills_dir
+        container.skill_loader._skills_dir = skills_dir
+        container.skill_loader._cache.clear()
         try:
             resp = client.get("/api/skills")
             assert resp.status_code == 200
             data = resp.get_json()
-            assert len(data["strategies"]) == 1
-            assert data["strategies"][0]["name"] == "my_strategy"
-            assert data["strategies"][0]["description"] == "Test strategy"
-            assert data["strategies"][0]["tool_weights"]["LightningDiagnosisTool"] == 1.5
+            assert len(data["skills"]) == 1
+            assert data["skills"][0]["name"] == "my_skill"
+            assert data["skills"][0]["description"] == "Test Skill"
         finally:
-            Path.glob = original_glob
+            container.skill_loader._skills_dir = original_dir
+            container.skill_loader._cache.clear()
 
 
 class TestDeleteSkill:

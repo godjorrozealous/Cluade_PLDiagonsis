@@ -274,81 +274,104 @@ def create_app() -> Flask:
             return jsonify({"error": str(e)}), 500
 
     # ------------------------------------------------------------------
-    # 策略管理 API
+    # 技能管理 API（Markdown 格式）
     # ------------------------------------------------------------------
     @app.route("/api/skills", methods=["GET"])
     def list_skills():
-        """获取所有保存的策略"""
-        skills_dir = Path("skills")
-        strategies = []
-        if skills_dir.exists():
-            for file_path in sorted(skills_dir.glob("*.json")):
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    strategies.append(
-                        {
-                            "name": data.get("name", file_path.stem),
-                            "description": data.get("description", ""),
-                            "created_at": data.get("created_at", ""),
-                            "tool_weights": data.get("tool_weights", {}),
-                            "excluded_tools": data.get("excluded_tools", []),
-                        }
-                    )
-                except Exception as e:
-                    logger.warning(f"读取策略文件失败 {file_path}: {e}")
-        return jsonify({"strategies": strategies})
+        """获取所有技能文件"""
+        skill_names = container.skill_loader.list_skills()
+        skills = []
+        for name in skill_names:
+            try:
+                content = container.skill_loader.load(name)
+                # 解析第一行标题作为描述
+                description = ""
+                for line in content.splitlines():
+                    if line.startswith("# "):
+                        description = line[2:].strip()
+                        break
+                skills.append(
+                    {
+                        "name": name,
+                        "description": description,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"读取技能文件失败 {name}: {e}")
+        return jsonify({"skills": skills})
+
+    @app.route("/api/skills", methods=["POST"])
+    def create_skill():
+        """创建新技能文件"""
+        data = request.get_json(force=True) or {}
+        name = data.get("name", "").strip()
+        content = data.get("content", "").strip()
+
+        if not name:
+            return jsonify({"error": "技能名称不能为空"}), 400
+        if not content:
+            return jsonify({"error": "技能内容不能为空"}), 400
+
+        try:
+            container.skill_loader.save(name, content)
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"技能 '{name}' 已保存",
+                    "name": name,
+                }
+            )
+        except Exception as e:
+            logger.error(f"保存技能失败: {e}")
+            return jsonify({"error": str(e)}), 500
 
     @app.route("/api/skills/<name>/activate", methods=["POST"])
     def activate_skill(name: str):
-        """激活策略到当前会话"""
+        """激活技能到当前会话"""
         session = container.session_manager.get_active()
         if not session:
             return jsonify({"error": "没有活跃的会话"}), 400
 
-        file_path = Path("skills") / f"{name}.json"
-        if not file_path.exists():
-            return jsonify({"error": f"策略 '{name}' 不存在"}), 404
+        skill_names = container.skill_loader.list_skills()
+        if name not in skill_names:
+            return jsonify({"error": f"技能 '{name}' 不存在"}), 404
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            # 应用策略配置到会话
-            weights = data.get("tool_weights", {})
-            excluded = data.get("excluded_tools", [])
-
-            if weights:
-                container.session_manager.update_weights(session.session_id, weights)
-            for tool in excluded:
-                container.session_manager.exclude_tool(session.session_id, tool)
-
-            session.custom_strategy_name = name
-
+            session.active_skill_name = name
             return jsonify(
                 {
                     "success": True,
-                    "strategy_name": name,
-                    "applied_weights": weights,
-                    "applied_exclusions": excluded,
+                    "skill_name": name,
+                    "message": f"技能 '{name}' 已激活",
                 }
             )
         except Exception as e:
-            logger.error(f"激活策略失败: {e}")
+            logger.error(f"激活技能失败: {e}")
             return jsonify({"error": str(e)}), 500
 
     @app.route("/api/skills/<name>", methods=["DELETE"])
     def delete_skill(name: str):
-        """删除策略"""
-        file_path = Path("skills") / f"{name}.json"
-        if not file_path.exists():
-            return jsonify({"error": f"策略 '{name}' 不存在"}), 404
+        """删除技能"""
+        if not container.skill_loader.delete(name):
+            return jsonify({"error": f"技能 '{name}' 不存在"}), 404
 
+        return jsonify({"success": True, "message": f"技能 '{name}' 已删除"})
+
+    @app.route("/api/skills/discover", methods=["POST"])
+    def discover_tools():
+        """手动触发工具扫描，返回新工具列表"""
         try:
-            file_path.unlink()
-            return jsonify({"success": True, "message": f"策略 '{name}' 已删除"})
+            available_tools = container.tool_registry.list_tools()
+            tool_names = [t.name for t in available_tools]
+            return jsonify(
+                {
+                    "success": True,
+                    "tools": tool_names,
+                    "count": len(tool_names),
+                }
+            )
         except Exception as e:
-            logger.error(f"删除策略失败: {e}")
+            logger.error(f"工具扫描失败: {e}")
             return jsonify({"error": str(e)}), 500
 
     @app.route("/api/skills/reset", methods=["POST"])
@@ -367,7 +390,7 @@ def create_app() -> Flask:
         for tool in list(session.excluded_tools):
             container.session_manager.include_tool(session.session_id, tool)
 
-        session.custom_strategy_name = None
+        session.active_skill_name = None
 
         return jsonify(
             {
@@ -401,11 +424,14 @@ def _resolve_command(intent_type: IntentType, container):
     if intent_type == IntentType.DIAGNOSE:
         return DiagnoseCommand(
             tool_registry=container.tool_registry,
-            weight_engine=container.weight_engine,
-            report_engine=container.report_engine,
             session_manager=container.session_manager,
             state_machine=container.state_machine,
             event_bus=container.event_bus,
+            skill_loader=container.skill_loader,
+            prompt_builder=container.prompt_builder,
+            diagnosis_planner=container.diagnosis_planner,
+            tool_executor=container.tool_executor,
+            report_composer=container.report_composer,
         )
     elif intent_type == IntentType.EXCLUDE_TOOL:
         return ExcludeToolCommand(
