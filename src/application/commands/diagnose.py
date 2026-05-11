@@ -107,7 +107,7 @@ class DiagnoseCommand(Command):
         for name, output in tool_outputs.items():
             yield Event.result(
                 session.session_id,
-                {"tool": name, "output": output.model_dump()},
+                {"tool": name, "output": output.model_dump(mode="json")},
             )
 
         # 9. 生成诊断报告

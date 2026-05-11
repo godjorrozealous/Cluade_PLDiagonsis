@@ -7,6 +7,7 @@ Flask 3.x 原生支持 async 视图函数，无需额外包装。
 import asyncio
 import json
 import logging
+from datetime import datetime
 
 import os
 from pathlib import Path
@@ -461,10 +462,20 @@ def _resolve_command(intent_type: IntentType, container):
 
 def _sse_event(event: Event) -> str:
     """格式化 SSE 事件"""
+
+    def _serialize(obj: Any) -> Any:
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, dict):
+            return {k: _serialize(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_serialize(v) for v in obj]
+        return obj
+
     data = {
         "event_type": event.event_type.value,
         "session_id": event.session_id,
-        "payload": event.payload,
+        "payload": _serialize(event.payload),
         "timestamp": event.timestamp.isoformat(),
     }
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
