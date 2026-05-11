@@ -195,6 +195,11 @@ class DiagnosisSession(BaseModel):
     excluded_tools: List[str] = Field(default_factory=list)
     rechecked_tools: List[str] = Field(default_factory=list)
 
+    included_tools: List[str] = Field(default_factory=list)
+    report_overrides: Dict[str, Any] = Field(default_factory=dict)
+    tool_order: Optional[List[str]] = None
+    active_skill_name: Optional[str] = None
+
     summaries: List[DiagnosisSummary] = Field(default_factory=list)
     current_summary: Optional[DiagnosisSummary] = None
     action_log: List[UserAction] = Field(default_factory=list)
