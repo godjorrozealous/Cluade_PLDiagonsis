@@ -50,6 +50,7 @@ class EventType(str, Enum):
     CONTENT = "content"
     COMPLETE = "complete"
     ERROR = "error"
+    STATUS = "status"
 
 
 class RenderMode(str, Enum):
@@ -261,6 +262,10 @@ class Event(BaseModel):
             event_type=EventType.ERROR,
             payload={"message": message, "code": code},
         )
+
+    @classmethod
+    def status(cls, session_id: str, data: dict) -> Event:
+        return cls(session_id=session_id, event_type=EventType.STATUS, payload=data)
 
 
 # ============================================================================

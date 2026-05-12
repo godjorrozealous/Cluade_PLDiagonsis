@@ -26,6 +26,7 @@ VALID_TRANSITIONS: Dict[SessionStatus, List[SessionStatus]] = {
         SessionStatus.EXCLUDED,
         SessionStatus.RECHECKING,
         SessionStatus.MODIFYING,
+        SessionStatus.DIAGNOSING,
     ],
     SessionStatus.COMPLETED: [
         SessionStatus.RECHECKING,
@@ -52,9 +53,11 @@ STATE_COMMAND_PERMISSIONS: Dict[SessionStatus, List[str]] = {
         "adjust_weight",
         "complete",
         "save_strategy",
+        "diagnose",
+        "include",
     ],
     SessionStatus.COMPLETED: ["recheck", "modify", "save_strategy"],
-    SessionStatus.EXCLUDED: ["modify", "recheck", "adjust_weight"],
+    SessionStatus.EXCLUDED: ["modify", "recheck", "adjust_weight", "diagnose", "include"],
     SessionStatus.RECHECKING: ["modify", "exclude", "adjust_weight"],
 }
 
@@ -113,9 +116,9 @@ class StateMachine:
 
         if loop is not None and loop.is_running():
             coro = self.event_bus.publish(
-                Event.thinking(
+                Event.status(
                     session.session_id,
-                    f"状态变更: {old_status.value} -> {target.value}",
+                    {"status": target.value, "previous": old_status.value},
                 )
             )
             loop.create_task(coro)

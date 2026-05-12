@@ -131,8 +131,8 @@ async def test_transition_raises_on_illegal_move(state_machine: StateMachine) ->
 
 
 @pytest.mark.asyncio
-async def test_transition_publishes_event_via_event_bus(event_bus: EventBus) -> None:
-    """transition() publishes a THINKING event through the event bus."""
+async def test_transition_publishes_status_event_via_event_bus(event_bus: EventBus) -> None:
+    """transition() publishes a STATUS event through the event bus."""
     received: list = []
 
     async def handler(event):
@@ -144,14 +144,13 @@ async def test_transition_publishes_event_via_event_bus(event_bus: EventBus) -> 
     session = DiagnosisSession(session_id="s1", line_name="L", status=SessionStatus.PENDING)
     sm.transition(session, SessionStatus.DIAGNOSING)
 
-    # Allow the fire-and-forget task a moment to run
     import asyncio
     await asyncio.sleep(0.05)
 
     assert len(received) == 1
-    assert received[0].event_type == EventType.THINKING
-    assert "pending" in received[0].payload["message"]
-    assert "diagnosing" in received[0].payload["message"]
+    assert received[0].event_type == EventType.STATUS
+    assert received[0].payload["status"] == "diagnosing"
+    assert received[0].payload["previous"] == "pending"
 
 
 # ============================================================================
@@ -176,11 +175,10 @@ def test_diagnosing_allows_exclude_and_recheck(state_machine: StateMachine) -> N
 
 
 def test_modifying_allows_broad_commands(state_machine: StateMachine) -> None:
-    """MODIFYING permits modify, exclude, recheck, adjust_weight, complete, save_strategy."""
+    """MODIFYING permits modify, exclude, recheck, adjust_weight, complete, save_strategy, diagnose."""
     session = DiagnosisSession(session_id="s1", line_name="L", status=SessionStatus.MODIFYING)
-    for cmd in ("modify", "exclude", "recheck", "adjust_weight", "complete", "save_strategy"):
+    for cmd in ("modify", "exclude", "recheck", "adjust_weight", "complete", "save_strategy", "diagnose"):
         assert state_machine.can_execute(session, cmd) is True
-    assert state_machine.can_execute(session, "diagnose") is False
 
 
 def test_completed_allows_recheck_modify_save_strategy(state_machine: StateMachine) -> None:
