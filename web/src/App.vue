@@ -4,6 +4,7 @@ import ChatPanel from '@/components/ChatPanel.vue'
 import ToolList from '@/components/ToolList.vue'
 import ReportPreview from '@/components/ReportPreview.vue'
 import StrategyManager from '@/components/StrategyManager.vue'
+import ReportModal from '@/components/ReportModal.vue'
 </script>
 
 <template>
@@ -13,6 +14,7 @@ import StrategyManager from '@/components/StrategyManager.vue'
     <ToolList />
     <ReportPreview />
     <StrategyManager />
+    <ReportModal />
   </div>
 </template>
 

@@ -41,6 +41,16 @@ function bubbleClass(role: string, eventType?: string): string {
 function toggleThinking(msg: ChatMessage) {
   msg.thinkingCollapsed = !msg.thinkingCollapsed
 }
+
+function handleViewReport(msg: ChatMessage) {
+  if (msg.report) {
+    store.openReport(msg.report)
+  }
+}
+
+function handleCompleteDiagnosis() {
+  store.markSessionComplete()
+}
 </script>
 
 <template>
@@ -53,6 +63,7 @@ function toggleThinking(msg: ChatMessage) {
         :class="msg.role"
       >
         <div class="bubble" :class="bubbleClass(msg.role, msg.eventType)">
+          <!-- Thinking state -->
           <div
             v-if="msg.role === 'assistant' && msg.eventType === 'thinking'"
             class="thinking"
@@ -60,6 +71,36 @@ function toggleThinking(msg: ChatMessage) {
             <span class="spinner"></span>
             <span>{{ msg.content }}</span>
           </div>
+
+          <!-- Complete state with summary card -->
+          <div v-else-if="msg.role === 'assistant' && msg.summary" class="summary-card">
+            <div class="summary-header">诊断完成</div>
+            <div class="summary-body">
+              <div class="summary-row">
+                <span class="summary-label">故障类型</span>
+                <span class="summary-value">{{ msg.summary.fault_type }}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">置信度</span>
+                <span class="summary-value">{{ Math.round(msg.summary.confidence * 100) }}%</span>
+              </div>
+            </div>
+            <div class="summary-actions">
+              <button v-if="msg.report" class="view-report-btn" @click="handleViewReport(msg)">
+                查看报告
+              </button>
+              <button
+                v-if="store.activeSession?.status === 'modifying' || store.activeSession?.status === 'excluded'"
+                class="complete-btn"
+                @click="handleCompleteDiagnosis"
+                :disabled="store.isLoading"
+              >
+                完成诊断
+              </button>
+            </div>
+          </div>
+
+          <!-- Regular assistant message -->
           <div v-else-if="msg.role === 'assistant'">
             <div
               v-if="msg.thinking && msg.thinking.trim()"
@@ -69,7 +110,7 @@ function toggleThinking(msg: ChatMessage) {
                 class="thinking-toggle"
                 @click="toggleThinking(msg)"
               >
-                <span class="toggle-icon" :class="{ collapsed: msg.thinkingCollapsed }">▼</span>
+                <span class="toggle-icon" :class="{ collapsed: msg.thinkingCollapsed }">&#9660;</span>
                 <span>思考过程</span>
               </button>
               <div
@@ -84,6 +125,8 @@ function toggleThinking(msg: ChatMessage) {
               v-html="renderMarkdown(msg.content)"
             ></div>
           </div>
+
+          <!-- User message -->
           <div v-else>{{ msg.content }}</div>
         </div>
         <div class="msg-time">
@@ -341,6 +384,90 @@ function toggleThinking(msg: ChatMessage) {
   color: #991b1b;
   font-size: 0.875rem;
   border-top: 1px solid #fecaca;
+}
+
+/* Summary card styles */
+.summary-card {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  min-width: 240px;
+}
+
+.summary-header {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #14532d;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #86efac;
+}
+
+.summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.summary-label {
+  color: #166534;
+}
+
+.summary-value {
+  font-weight: 600;
+  color: #14532d;
+}
+
+.summary-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.view-report-btn {
+  background: #fff;
+  color: #166534;
+  border: 1px solid #86efac;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.view-report-btn:hover {
+  background: #f0fdf4;
+  border-color: #22c55e;
+}
+
+.complete-btn {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.complete-btn:hover:not(:disabled) {
+  background: #059669;
+}
+
+.complete-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
 
