@@ -181,6 +181,7 @@ def create_app() -> Flask:
             session = container.session_manager.switch_active(id)
             return jsonify(
                 {
+                    "success": True,
                     "session_id": session.session_id,
                     "line_name": session.line_name,
                     "status": session.status.value,

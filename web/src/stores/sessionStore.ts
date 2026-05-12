@@ -120,8 +120,23 @@ export const useSessionStore = defineStore('session', () => {
           error.value = assistantMsg.content
         }
 
-        if (event.session_id && activeSessionId.value !== event.session_id) {
-          activeSessionId.value = event.session_id
+        if (event.session_id) {
+          if (activeSessionId.value !== event.session_id) {
+            activeSessionId.value = event.session_id
+          }
+          // Add new session to list if not present
+          const existingIdx = sessions.value.findIndex(
+            (s) => s.session_id === event.session_id
+          )
+          if (existingIdx === -1) {
+            sessions.value.push({
+              session_id: event.session_id,
+              line_name: '新会话',
+              status: event.payload?.status ?? 'pending',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+          }
         }
       }
     } catch (err) {

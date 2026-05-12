@@ -63,9 +63,18 @@ function handleCompleteDiagnosis() {
         :class="msg.role"
       >
         <div class="bubble" :class="bubbleClass(msg.role, msg.eventType)">
+          <!-- Start / Loading state -->
+          <div
+            v-if="msg.role === 'assistant' && msg.eventType === 'start'"
+            class="thinking"
+          >
+            <span class="spinner"></span>
+            <span>诊断中...</span>
+          </div>
+
           <!-- Thinking state -->
           <div
-            v-if="msg.role === 'assistant' && msg.eventType === 'thinking'"
+            v-else-if="msg.role === 'assistant' && msg.eventType === 'thinking'"
             class="thinking"
           >
             <span class="spinner"></span>

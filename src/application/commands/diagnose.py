@@ -5,7 +5,9 @@ import logging
 from typing import AsyncIterator
 
 from src.core.models import (
+    ConfidenceLevel,
     DiagnosisContext,
+    DiagnosisResult,
     DiagnosisSession,
     DiagnosisSummary,
     Event,
@@ -148,8 +150,19 @@ class DiagnoseCommand(Command):
         session.latest_report = report
 
         # 10. 创建诊断摘要并保存到会话
+        confidence_level = (
+            ConfidenceLevel.HIGH if summary['confidence'] >= 0.7
+            else ConfidenceLevel.MEDIUM if summary['confidence'] >= 0.4
+            else ConfidenceLevel.LOW
+        )
         diagnosis_summary = DiagnosisSummary(
             fault_context=fault_context,
+            primary_diagnosis=DiagnosisResult(
+                fault_type=summary['fault_type'],
+                confidence=summary['confidence'],
+                confidence_level=confidence_level,
+                tool_name=summary.get('primary_tool', 'unknown'),
+            ),
         )
         self.session_manager.add_summary(session.session_id, diagnosis_summary)
 
