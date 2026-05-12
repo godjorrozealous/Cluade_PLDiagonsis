@@ -105,6 +105,16 @@ export function completeSession(sessionId: string) {
   )
 }
 
+export function createSkill(name: string, content: string) {
+  return request<{ success: boolean; message: string; name: string }>(
+    '/api/skills',
+    {
+      method: 'POST',
+      body: JSON.stringify({ name, content }),
+    }
+  )
+}
+
 export interface SettingsInfo {
   default_weights: Record<string, number>
   weight_range: { min: number; max: number }

@@ -1,19 +1,23 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getSkills, activateSkill, deleteSkill, resetSkills } from '@/api/http'
+import { getSkills, deleteSkill, resetSkills, getDefaultSkill, setDefaultSkill } from '@/api/http'
 import type { SkillInfo } from '@/api/http'
 
 const skills = ref<SkillInfo[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
-const activeName = ref<string | null>(null)
+const defaultSkill = ref<string>('comprehensive_diagnosis')
 
 async function loadSkills() {
   loading.value = true
   error.value = null
   try {
-    const data = await getSkills()
-    skills.value = data.skills
+    const [skillsData, defaultData] = await Promise.all([
+      getSkills(),
+      getDefaultSkill(),
+    ])
+    skills.value = skillsData.skills
+    defaultSkill.value = defaultData.default_skill
   } catch (err) {
     error.value = (err as Error).message
   } finally {
@@ -24,8 +28,8 @@ async function loadSkills() {
 async function handleActivate(name: string) {
   try {
     error.value = null
-    await activateSkill(name)
-    activeName.value = name
+    await setDefaultSkill(name)
+    defaultSkill.value = name
   } catch (err) {
     error.value = (err as Error).message
   }
@@ -36,7 +40,7 @@ async function handleDelete(name: string) {
   try {
     error.value = null
     await deleteSkill(name)
-    if (activeName.value === name) activeName.value = null
+    if (defaultSkill.value === name) defaultSkill.value = 'comprehensive_diagnosis'
     await loadSkills()
   } catch (err) {
     error.value = (err as Error).message
@@ -47,7 +51,7 @@ async function handleReset() {
   try {
     error.value = null
     await resetSkills()
-    activeName.value = null
+    defaultSkill.value = 'comprehensive_diagnosis'
   } catch (err) {
     error.value = (err as Error).message
   }
@@ -73,7 +77,7 @@ onMounted(() => {
         v-for="s in skills"
         :key="s.name"
         class="skill-item"
-        :class="{ active: activeName === s.name }"
+        :class="{ active: defaultSkill === s.name }"
       >
         <div class="skill-info">
           <div class="skill-name">{{ s.name }}</div>
@@ -82,10 +86,10 @@ onMounted(() => {
         <div class="skill-actions">
           <button
             class="activate-btn"
-            :class="{ activated: activeName === s.name }"
+            :class="{ activated: defaultSkill === s.name }"
             @click="handleActivate(s.name)"
           >
-            {{ activeName === s.name ? '已激活' : '激活' }}
+            {{ defaultSkill === s.name ? '已激活' : '激活' }}
           </button>
           <button class="delete-btn" @click="handleDelete(s.name)" title="删除">&times;</button>
         </div>
@@ -96,7 +100,7 @@ onMounted(() => {
     <div v-else-if="error" class="skill-error">{{ error }}</div>
     <div v-else class="skill-empty">
       暂无技能
-      <p class="hint">在对话中输入"保存为 [名称] 技能"来创建</p>
+      <p class="hint">完成诊断后可保存为新技能</p>
     </div>
   </section>
 </template>

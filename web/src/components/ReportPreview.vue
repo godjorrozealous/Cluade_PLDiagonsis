@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { renderMarkdown } from '@/utils/markdown'
+import { createSkill } from '@/api/http'
 
 const store = useSessionStore()
 
@@ -9,7 +10,7 @@ const reportContent = computed(() => {
   const last = store.messages
     .filter((m) => m.role === 'assistant' && m.eventType === 'complete')
     .pop()
-  return last?.content ?? ''
+  return last?.report ?? last?.content ?? ''
 })
 
 const hasReport = computed(() => !!reportContent.value)
@@ -20,7 +21,24 @@ const canComplete = computed(() => {
 })
 
 async function handleComplete() {
+  const sessionId = store.activeSessionId
+  if (!sessionId) return
+
   await store.markSessionComplete()
+
+  const saveSkill = confirm('是否将此诊断策略保存为新技能？')
+  if (saveSkill) {
+    try {
+      const data = await store.fetchSkillSummary(sessionId)
+      const name = prompt('技能名称:', data.suggested_name)
+      if (name) {
+        await createSkill(name, data.content)
+        alert(`技能 "${name}" 已保存`)
+      }
+    } catch (err) {
+      alert(`保存技能失败: ${(err as Error).message}`)
+    }
+  }
 }
 </script>
 

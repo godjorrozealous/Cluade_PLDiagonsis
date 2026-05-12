@@ -168,9 +168,15 @@ function statusLabel(status: string): string {
   color: #f1f5f9;
 }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .status-diagnosing {
   background: #f59e0b;
   color: #fff;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .status-modifying {
