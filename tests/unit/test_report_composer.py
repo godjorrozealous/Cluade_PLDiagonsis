@@ -78,9 +78,9 @@ async def test_compose_generates_report(
     )
 
     # 验证输出包含章节和工具数据
-    assert "## 概述" in result
-    assert "## 诊断结论" in result
-    assert "# 输电线路故障诊断报告" in result
+    assert "## 概述" in result["report"]
+    assert "## 诊断结论" in result["report"]
+    assert "# 输电线路故障诊断报告" in result["report"]
 
     # 验证 LLM 被调用且 prompt 包含工具数据
     report_composer.llm.chat.assert_awaited_once()
@@ -121,4 +121,4 @@ async def test_compose_without_template_uses_defaults(
         assert chapter in prompt
 
     # 验证返回结果
-    assert "# 输电线路故障诊断报告" in result
+    assert "# 输电线路故障诊断报告" in result["report"]

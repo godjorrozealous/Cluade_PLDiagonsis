@@ -1,5 +1,6 @@
 """诊断 Command"""
 
+import asyncio
 import logging
 from typing import AsyncIterator
 
@@ -56,13 +57,16 @@ class DiagnoseCommand(Command):
         """执行诊断"""
         session = ctx.session
 
-        # 1. 验证状态
+        # 1. 验证状态并转换到诊断中
         if not self.state_machine.can_execute(session, "diagnose"):
             raise InvalidStateError(
                 f"当前状态 {session.status.value} 不允许执行诊断"
             )
 
         yield Event.start(session.session_id, "开始故障诊断...")
+        self.session_manager.transition(
+            session.session_id, SessionStatus.DIAGNOSING
+        )
 
         # 2. 解析故障上下文
         fault_context = self._parse_fault_context(ctx.user_message, session)
@@ -85,9 +89,33 @@ class DiagnoseCommand(Command):
             skill_md, session, available_tools, ctx.user_message
         )
 
-        # 6. AI 制定诊断方案
+        # 6. AI 制定诊断方案（流式输出思考过程）
         yield Event.thinking(session.session_id, "AI 正在制定诊断方案...")
-        plan = await self.diagnosis_planner.plan(prompt)
+        queue: asyncio.Queue[str] = asyncio.Queue()
+        thinking_parts: list[str] = []
+
+        def on_chunk(chunk: str) -> None:
+            queue.put_nowait(chunk)
+
+        plan_task = asyncio.create_task(
+            self.diagnosis_planner.plan(prompt, on_chunk=on_chunk)
+        )
+
+        while True:
+            try:
+                chunk = await asyncio.wait_for(queue.get(), timeout=0.05)
+                thinking_parts.append(chunk)
+                yield Event.thinking(
+                    session.session_id, "".join(thinking_parts)
+                )
+            except asyncio.TimeoutError:
+                if plan_task.done():
+                    while not queue.empty():
+                        thinking_parts.append(queue.get_nowait())
+                    break
+
+        plan = plan_task.result()
+        thinking_text = "".join(thinking_parts)
         tool_names = [t["name"] for t in plan.get("tools_to_call", [])]
         yield Event.thinking(
             session.session_id,
@@ -112,27 +140,30 @@ class DiagnoseCommand(Command):
 
         # 9. 生成诊断报告
         yield Event.thinking(session.session_id, "生成诊断报告...")
-        report = await self.report_composer.compose(
+        composed = await self.report_composer.compose(
             tool_outputs, None, session.session_id
         )
+        report = composed["report"]
+        summary = composed["summary"]
 
         # 10. 创建诊断摘要并保存到会话
-        summary = DiagnosisSummary(
+        diagnosis_summary = DiagnosisSummary(
             fault_context=fault_context,
         )
-        self.session_manager.add_summary(session.session_id, summary)
+        self.session_manager.add_summary(session.session_id, diagnosis_summary)
 
-        # 11. 转换到完成状态
+        # 11. 转换到可修改状态
         self.session_manager.transition(
-            session.session_id, SessionStatus.COMPLETED
+            session.session_id, SessionStatus.MODIFYING
         )
 
         yield Event.complete(
             session.session_id,
             {
+                "summary": summary,
                 "report": report,
-                "primary_diagnosis": "未知",
-                "confidence": 0,
+                "message": f"诊断完成：{summary['fault_type']}（置信度 {int(summary['confidence'] * 100)}%）",
+                "thinking": thinking_text,
             },
         )
 

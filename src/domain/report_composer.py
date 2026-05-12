@@ -5,7 +5,7 @@
 
 import json
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from src.core.models import TemplateConfig, ToolOutput
 from src.infrastructure.llm_service import LLMService
@@ -34,7 +34,7 @@ class ReportComposer:
         tool_outputs: Dict[str, ToolOutput],
         template: Optional[TemplateConfig],
         session_id: str,
-    ) -> str:
+    ) -> Dict[str, Any]:
         """撰写完整诊断报告。
 
         通过单次 LLM 调用生成包含所有章节的完整报告。
@@ -45,7 +45,9 @@ class ReportComposer:
             session_id: 当前会话 ID，用于日志追踪。
 
         Returns:
-            格式化后的完整报告 Markdown 字符串。
+            包含 summary 和 report 的字典。
+                - summary: 诊断摘要（故障类型、置信度、主工具）
+                - report: 格式化后的完整报告 Markdown 字符串。
         """
         # 确定章节列表
         if template and template.chapters:
@@ -70,7 +72,8 @@ class ReportComposer:
 
         # 格式化响应
         formatted = self._format_response(response)
-        return formatted
+        summary = self._extract_summary(tool_outputs)
+        return {"summary": summary, "report": formatted}
 
     def _build_prompt(self, tool_outputs: Dict[str, ToolOutput], chapters: list[str]) -> str:
         """构建 LLM 提示词。
@@ -135,3 +138,27 @@ class ReportComposer:
         if not stripped.startswith("# "):
             return f"# 输电线路故障诊断报告\n\n{stripped}"
         return stripped
+
+    def _extract_summary(self, tool_outputs: Dict[str, ToolOutput]) -> Dict[str, Any]:
+        """从工具输出中提取诊断摘要。
+
+        取置信度最高的工具结果作为 primary diagnosis。
+        """
+        best_tool = None
+        best_confidence = 0.0
+        best_fault_type = "未知"
+
+        for tool_name, output in tool_outputs.items():
+            structured = output.structured_data or {}
+            confidence = structured.get("confidence", 0.0)
+            fault_type = structured.get("fault_type", "未知")
+            if isinstance(confidence, (int, float)) and confidence > best_confidence:
+                best_confidence = confidence
+                best_fault_type = fault_type
+                best_tool = tool_name
+
+        return {
+            "fault_type": best_fault_type,
+            "confidence": round(best_confidence, 2),
+            "primary_tool": best_tool,
+        }

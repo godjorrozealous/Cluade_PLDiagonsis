@@ -38,7 +38,7 @@ def diagnose_command() -> DiagnoseCommand:
     mock_tool_executor.execute.return_value = {
         "ToolA": ToolOutput(tool_name="ToolA", raw_text="ok"),
     }
-    mock_report_composer.compose.return_value = "# report"
+    mock_report_composer.compose.return_value = {"report": "# report", "summary": {"fault_type": "雷击", "confidence": 0.85, "primary_tool": "ToolA"}}
 
     return DiagnoseCommand(
         tool_registry=mock_registry,

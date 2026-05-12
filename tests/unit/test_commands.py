@@ -234,7 +234,8 @@ async def test_exclude_tool_success(exclude_command: ExcludeToolCommand) -> None
     assert events[0].event_type == EventType.THINKING
     assert events[1].event_type == EventType.COMPLETE
     exclude_command.session_manager.exclude_tool.assert_called_once_with("s1", "ToolA")
-    exclude_command.session_manager.transition.assert_called_once_with("s1", SessionStatus.EXCLUDED)
+    # When already in MODIFYING, no transition is triggered
+    exclude_command.session_manager.transition.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -377,7 +378,7 @@ def diagnose_command() -> DiagnoseCommand:
     mock_tool_executor.execute.return_value = {
         "ToolA": ToolOutput(tool_name="ToolA", raw_text="ok"),
     }
-    mock_report_composer.compose.return_value = "# report"
+    mock_report_composer.compose.return_value = {"report": "# report", "summary": {"fault_type": "雷击", "confidence": 0.85, "primary_tool": "ToolA"}}
     return DiagnoseCommand(
         mock_registry,
         mock_session_manager,
@@ -403,7 +404,7 @@ async def test_diagnose_success(diagnose_command: DiagnoseCommand) -> None:
     assert any(e.event_type == EventType.THINKING for e in events)
     assert events[-1].event_type == EventType.COMPLETE
     diagnose_command.session_manager.add_summary.assert_called_once()
-    diagnose_command.session_manager.transition.assert_called_with("s1", SessionStatus.COMPLETED)
+    diagnose_command.session_manager.transition.assert_called_with("s1", SessionStatus.MODIFYING)
 
 
 @pytest.mark.asyncio
