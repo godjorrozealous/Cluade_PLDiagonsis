@@ -145,6 +145,7 @@ class DiagnoseCommand(Command):
         )
         report = composed["report"]
         summary = composed["summary"]
+        session.latest_report = report
 
         # 10. 创建诊断摘要并保存到会话
         diagnosis_summary = DiagnosisSummary(

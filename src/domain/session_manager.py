@@ -34,6 +34,7 @@ class SessionManager:
         self.event_bus = event_bus
         self.state_machine = state_machine
         self.repository = repository
+        self._default_skill_name: str = "comprehensive_diagnosis"
 
         if repository is not None:
             self._sessions = repository.load_all()
@@ -62,6 +63,7 @@ class SessionManager:
             line_name=normalized,
             status=SessionStatus.PENDING,
         )
+        session.active_skill_name = self._default_skill_name
         self._sessions[session.session_id] = session
         self._active_session_id = session.session_id
 
@@ -101,6 +103,10 @@ class SessionManager:
 
         # 创建新会话
         return self.create(line_name)
+    def set_default_skill(self, name: str) -> None:
+        """设置全局默认技能"""
+        self._default_skill_name = name
+        logger.info(f"设置默认技能: {name}")
 
     def list_sessions(self) -> List[DiagnosisSession]:
         """列出所有会话"""

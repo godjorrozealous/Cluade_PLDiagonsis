@@ -120,25 +120,24 @@ def create_app() -> Flask:
                 async for event in cmd.execute(ctx):
                     yield _sse_event(event)
 
-                # 自动链式诊断：排除/恢复工具后，若消息含"再次诊断"则自动重新诊断
+                # 自动链式诊断：排除/恢复工具后无条件自动重新诊断
                 if intent_type in (IntentType.EXCLUDE_TOOL, IntentType.INCLUDE_TOOL):
-                    if "再次诊断" in message or "重新诊断" in message:
-                        yield _sse_event(
-                            Event.thinking(session.session_id, "自动重新诊断...")
-                        )
-                        diagnose_cmd = DiagnoseCommand(
-                            tool_registry=container.tool_registry,
-                            session_manager=container.session_manager,
-                            state_machine=container.state_machine,
-                            event_bus=container.event_bus,
-                            skill_loader=container.skill_loader,
-                            prompt_builder=container.prompt_builder,
-                            diagnosis_planner=container.diagnosis_planner,
-                            tool_executor=container.tool_executor,
-                            report_composer=container.report_composer,
-                        )
-                        async for event in diagnose_cmd.execute(ctx):
-                            yield _sse_event(event)
+                    yield _sse_event(
+                        Event.thinking(session.session_id, "自动重新诊断...")
+                    )
+                    diagnose_cmd = DiagnoseCommand(
+                        tool_registry=container.tool_registry,
+                        session_manager=container.session_manager,
+                        state_machine=container.state_machine,
+                        event_bus=container.event_bus,
+                        skill_loader=container.skill_loader,
+                        prompt_builder=container.prompt_builder,
+                        diagnosis_planner=container.diagnosis_planner,
+                        tool_executor=container.tool_executor,
+                        report_composer=container.report_composer,
+                    )
+                    async for event in diagnose_cmd.execute(ctx):
+                        yield _sse_event(event)
             else:
                 # 通用对话
                 response = await container.llm_service.chat(
@@ -232,6 +231,15 @@ def create_app() -> Flask:
         """获取会话详情"""
         try:
             session = container.session_manager.get(id)
+            # Build latest_summary from current_summary
+            latest_summary = None
+            if session.current_summary:
+                primary = session.current_summary.primary_diagnosis
+                latest_summary = {
+                    "fault_type": primary.fault_type if primary else "未知",
+                    "confidence": primary.confidence if primary else 0,
+                    "report": session.latest_report,
+                }
             return jsonify(
                 {
                     "session_id": session.session_id,
@@ -242,6 +250,7 @@ def create_app() -> Flask:
                     "active_weights": session.active_weights,
                     "excluded_tools": session.excluded_tools,
                     "rechecked_tools": session.rechecked_tools,
+                    "latest_summary": latest_summary,
                     "summaries": [
                         {
                             "version": s.version,
@@ -455,6 +464,75 @@ def create_app() -> Flask:
                 "default_weights": DEFAULT_WEIGHTS,
             }
         )
+
+    @app.route("/api/skills/default", methods=["GET"])
+    def get_default_skill():
+        """获取全局默认技能"""
+        return jsonify({
+            "default_skill": container.session_manager._default_skill_name,
+            "available_skills": container.skill_loader.list_skills(),
+        })
+
+    @app.route("/api/skills/default", methods=["POST"])
+    def set_default_skill():
+        """设置全局默认技能"""
+        data = request.json or {}
+        name = data.get("name", "").strip()
+        if not name:
+            return jsonify({"error": "技能名称不能为空"}), 400
+        if name not in container.skill_loader.list_skills():
+            return jsonify({"error": f"技能 '{name}' 不存在"}), 404
+        container.session_manager.set_default_skill(name)
+        container.session_manager._persist()
+        return jsonify({"success": True, "default_skill": name})
+
+    @app.route("/api/sessions/<id>/skill-summary", methods=["GET"])
+    def generate_skill_summary(id: str):
+        """生成技能摘要（基于会话操作历史）"""
+        try:
+            session = container.session_manager.get(id)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 404
+
+        excluded = set()
+        included = set()
+        weight_changes = {}
+        report_modifications = []
+
+        for action in session.action_log:
+            t = action.action_type
+            params = action.parameters
+            if t == "exclude":
+                excluded.add(params.get("tool_name", ""))
+            elif t == "include":
+                included.add(params.get("tool_name", ""))
+            elif t == "adjust_weight":
+                weight_changes[params.get("tool_name", "")] = params.get("weight", 0)
+            elif t == "modify_report":
+                report_modifications.append(params.get("description", ""))
+
+        final_excluded = excluded - included
+
+        content = f"""# {session.line_name} 诊断策略
+
+## 描述
+基于 {session.line_name} 的诊断经验自动生成的策略模板。
+适用于类似故障场景的输电线路诊断。
+
+## 默认排除的诊断工具
+{chr(10).join(f"- {t}" for t in final_excluded) or "无"}
+
+## 默认权重调整
+{chr(10).join(f"- {t}: {v}" for t, v in weight_changes.items()) or "无"}
+
+## 报告模板修改
+{chr(10).join(f"- {m}" for m in report_modifications) or "无"}
+
+## 使用说明
+激活此技能后，新会话将自动应用上述配置。
+"""
+        suggested_name = f"{session.line_name}_策略"
+        return jsonify({"content": content, "suggested_name": suggested_name})
 
     # ------------------------------------------------------------------
     # 静态文件服务（前端 dist）
