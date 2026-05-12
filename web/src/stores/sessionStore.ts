@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { DiagnosisSession, ChatMessage } from '@/types'
-import { getSessions, switchSession, completeSession } from '@/api/http'
+import type { DiagnosisSession, ChatMessage, DiagnosisSummary } from '@/types'
+import { getSessions, getSession, switchSession, completeSession, getSkillSummary } from '@/api/http'
 import { sendMessage } from '@/api/sse'
 
 export const useSessionStore = defineStore('session', () => {
@@ -10,6 +10,8 @@ export const useSessionStore = defineStore('session', () => {
   const messages = ref<ChatMessage[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const reportModalVisible = ref(false)
+  const currentReport = ref<string>('')
 
   const activeSession = computed(() =>
     sessions.value.find((s) => s.session_id === activeSessionId.value) ?? null
@@ -32,6 +34,26 @@ export const useSessionStore = defineStore('session', () => {
       if (data.success) {
         activeSessionId.value = sessionId
         messages.value = []
+
+        const sessionData = await getSession(sessionId)
+        const summary = sessionData.latest_summary
+        if (summary) {
+          const syntheticMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: summary.report
+              ? `诊断完成：${summary.fault_type}（置信度 ${Math.round(summary.confidence * 100)}%）`
+              : '诊断完成',
+            eventType: 'complete',
+            timestamp: new Date().toISOString(),
+            summary: {
+              fault_type: summary.fault_type,
+              confidence: summary.confidence,
+            },
+            report: summary.report ?? undefined,
+          }
+          messages.value.push(syntheticMsg)
+        }
       }
     } catch (err) {
       error.value = (err as Error).message
@@ -70,10 +92,28 @@ export const useSessionStore = defineStore('session', () => {
           assistantMsg.thinking = (assistantMsg.thinking ?? '') + msg
         } else if (event.event_type === 'result' || event.event_type === 'content') {
           assistantMsg.content += event.payload?.content ?? ''
+        } else if (event.event_type === 'status') {
+          const payloadStatus = event.payload?.status
+          const validStatuses: DiagnosisSession['status'][] = ['pending', 'diagnosing', 'modifying', 'completed', 'excluded', 'rechecking']
+          const newStatus = validStatuses.includes(payloadStatus) ? payloadStatus : undefined
+          if (newStatus && activeSessionId.value) {
+            const idx = sessions.value.findIndex(
+              (s) => s.session_id === activeSessionId.value
+            )
+            if (idx !== -1) {
+              sessions.value[idx] = { ...sessions.value[idx], status: newStatus }
+            }
+          }
         } else if (event.event_type === 'complete') {
-          assistantMsg.content = event.payload?.report ?? assistantMsg.content
+          assistantMsg.content = event.payload?.message ?? '诊断完成'
           if (event.payload?.thinking) {
             assistantMsg.thinking = event.payload.thinking
+          }
+          if (event.payload?.summary) {
+            assistantMsg.summary = event.payload.summary as DiagnosisSummary
+          }
+          if (event.payload?.report) {
+            assistantMsg.report = event.payload.report as string
           }
         } else if (event.event_type === 'error') {
           assistantMsg.content = `错误: ${event.payload?.message ?? '未知错误'}`
@@ -108,12 +148,32 @@ export const useSessionStore = defineStore('session', () => {
       if (data.success) {
         const idx = sessions.value.findIndex((s) => s.session_id === sessionId)
         if (idx !== -1) {
-          sessions.value[idx].status = 'completed'
+          sessions.value[idx] = { ...sessions.value[idx], status: 'completed' }
         }
       }
     } catch (err) {
       error.value = (err as Error).message
     }
+  }
+
+  async function fetchSkillSummary(sessionId: string) {
+    try {
+      error.value = null
+      return await getSkillSummary(sessionId)
+    } catch (err) {
+      error.value = (err as Error).message
+      throw err
+    }
+  }
+
+  function openReport(report: string) {
+    currentReport.value = report
+    reportModalVisible.value = true
+  }
+
+  function closeReport() {
+    reportModalVisible.value = false
+    currentReport.value = ''
   }
 
   return {
@@ -123,10 +183,15 @@ export const useSessionStore = defineStore('session', () => {
     messages,
     isLoading,
     error,
+    reportModalVisible,
+    currentReport,
     loadSessions,
     selectSession,
     postMessage,
     clearMessages,
     markSessionComplete,
+    fetchSkillSummary,
+    openReport,
+    closeReport,
   }
 })

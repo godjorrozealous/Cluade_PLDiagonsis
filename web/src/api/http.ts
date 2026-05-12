@@ -15,6 +15,10 @@ export function getSessions() {
   return request<{ sessions: import('@/types').DiagnosisSession[] }>('/api/sessions')
 }
 
+export function getSession(sessionId: string) {
+  return request<import('@/types').DiagnosisSession>(`/api/sessions/${sessionId}`)
+}
+
 export function switchSession(sessionId: string) {
   return request<{ success: boolean; session: import('@/types').DiagnosisSession }>(
     `/api/sessions/${sessionId}/switch`,
@@ -44,6 +48,26 @@ export interface SkillInfo {
 
 export function getSkills() {
   return request<{ skills: SkillInfo[] }>('/api/skills')
+}
+
+export function getDefaultSkill() {
+  return request<{ default_skill: string; available_skills: string[] }>('/api/skills/default')
+}
+
+export function setDefaultSkill(name: string) {
+  return request<{ success: boolean; default_skill: string; message: string }>(
+    '/api/skills/default',
+    {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }
+  )
+}
+
+export function getSkillSummary(sessionId: string) {
+  return request<{ content: string; suggested_name: string }>(
+    `/api/sessions/${sessionId}/skill-summary`
+  )
 }
 
 export function activateSkill(name: string) {
