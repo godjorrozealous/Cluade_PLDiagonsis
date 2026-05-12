@@ -52,9 +52,9 @@ def test_intent_type_covers_all_commands() -> None:
     """IntentType includes every command the system supports."""
     values = {i.value for i in IntentType}
     expected = {
-        "diagnose", "exclude_tool", "recheck_tool", "adjust_weight",
+        "diagnose", "exclude_tool", "include_tool", "recheck_tool", "adjust_weight",
         "modify_report", "list_sessions", "switch_session",
-        "save_strategy", "load_strategy", "general",
+        "save_strategy", "load_strategy", "complete", "general",
     }
     assert values == expected
 

@@ -84,15 +84,16 @@ class SessionManager:
     def get_or_create(self, line_name: str) -> DiagnosisSession:
         """获取或创建会话
 
-        同一线路（标准化后）且未完成的会话会被复用。
+        同一线路（标准化后）且处于 pending 状态的会话会被复用。
+        已开始诊断的会话不再复用，避免状态冲突。
         """
         normalized = LineNormalizer.normalize(line_name)
 
-        # 查找现有活跃会话
+        # 查找现有 pending 会话
         for sess in self._sessions.values():
             if (
                 LineNormalizer.normalize(sess.line_name) == normalized
-                and sess.status != SessionStatus.COMPLETED
+                and sess.status == SessionStatus.PENDING
             ):
                 self._active_session_id = sess.session_id
                 logger.info(f"复用会话: {sess.session_id} ({normalized})")

@@ -74,6 +74,13 @@ export function clearSessions() {
   )
 }
 
+export function completeSession(sessionId: string) {
+  return request<{ success: boolean; session_id: string; line_name: string; status: string }>(
+    `/api/sessions/${sessionId}/complete`,
+    { method: 'POST' }
+  )
+}
+
 export interface SettingsInfo {
   default_weights: Record<string, number>
   weight_range: { min: number; max: number }

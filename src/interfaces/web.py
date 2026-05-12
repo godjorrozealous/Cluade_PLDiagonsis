@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
+from typing import Any
 
 import os
 from pathlib import Path
@@ -17,9 +18,11 @@ from flask import Flask, Response, jsonify, request, send_from_directory, stream
 from src.core.models import Event, EventType, IntentType, SessionStatus
 from src.application.commands.diagnose import DiagnoseCommand
 from src.application.commands.exclude import ExcludeToolCommand
+from src.application.commands.include_tool import IncludeToolCommand
 from src.application.commands.recheck import RecheckToolCommand
 from src.application.commands.adjust_weight import AdjustWeightCommand
 from src.application.commands.save_strategy import SaveStrategyCommand
+from src.application.commands.complete_diagnosis import CompleteDiagnosisCommand
 from src.application.context import ContextBuilder
 from src.interfaces.dependency_injection import get_container
 
@@ -88,11 +91,24 @@ def create_app() -> Flask:
     async def _chat_stream(message: str):
         """聊天流生成器（异步）"""
         try:
-            # 1. 获取或创建会话
-            session = container.session_manager.get_or_create(message)
+            # 1. 意图识别（先识别意图，再决定如何获取会话）
+            intent = await container.intent_classifier.classify(message, None)
+            intent_type = intent.intent_type
 
-            # 2. 意图识别
+            # 2. 获取会话：诊断类意图从消息中提取线路，其他意图使用活跃会话
+            if intent_type == IntentType.DIAGNOSE:
+                session = container.session_manager.get_or_create(message)
+            else:
+                session = container.session_manager.get_active()
+                if session is None:
+                    yield _sse_event(
+                        Event.error("", "没有活跃的会话，请先开始诊断")
+                    )
+                    return
+
             yield _sse_event(Event.thinking(session.session_id, "理解用户意图..."))
+
+            # 重新分类（带会话上下文）以获得更准确的参数提取
             intent = await container.intent_classifier.classify(message, session)
 
             # 3. 构建执行上下文
@@ -103,6 +119,26 @@ def create_app() -> Flask:
             if cmd is not None:
                 async for event in cmd.execute(ctx):
                     yield _sse_event(event)
+
+                # 自动链式诊断：排除/恢复工具后，若消息含"再次诊断"则自动重新诊断
+                if intent_type in (IntentType.EXCLUDE_TOOL, IntentType.INCLUDE_TOOL):
+                    if "再次诊断" in message or "重新诊断" in message:
+                        yield _sse_event(
+                            Event.thinking(session.session_id, "自动重新诊断...")
+                        )
+                        diagnose_cmd = DiagnoseCommand(
+                            tool_registry=container.tool_registry,
+                            session_manager=container.session_manager,
+                            state_machine=container.state_machine,
+                            event_bus=container.event_bus,
+                            skill_loader=container.skill_loader,
+                            prompt_builder=container.prompt_builder,
+                            diagnosis_planner=container.diagnosis_planner,
+                            tool_executor=container.tool_executor,
+                            report_composer=container.report_composer,
+                        )
+                        async for event in diagnose_cmd.execute(ctx):
+                            yield _sse_event(event)
             else:
                 # 通用对话
                 response = await container.llm_service.chat(
@@ -153,6 +189,25 @@ def create_app() -> Flask:
             )
         except Exception as e:
             return jsonify({"error": str(e)}), 404
+
+    @app.route("/api/sessions/<id>/complete", methods=["POST"])
+    def complete_session(id: str):
+        """完成诊断，将会话标记为 completed"""
+        try:
+            session = container.session_manager.get(id)
+            container.state_machine.transition(session, SessionStatus.COMPLETED)
+            container.session_manager._persist()
+            return jsonify(
+                {
+                    "success": True,
+                    "session_id": session.session_id,
+                    "line_name": session.line_name,
+                    "status": session.status.value,
+                }
+            )
+        except Exception as e:
+            logger.error(f"完成诊断失败: {e}")
+            return jsonify({"error": str(e)}), 400
 
     @app.route("/api/tools", methods=["GET"])
     def list_tools():
@@ -439,6 +494,11 @@ def _resolve_command(intent_type: IntentType, container):
             session_manager=container.session_manager,
             state_machine=container.state_machine,
         )
+    elif intent_type == IntentType.INCLUDE_TOOL:
+        return IncludeToolCommand(
+            session_manager=container.session_manager,
+            state_machine=container.state_machine,
+        )
     elif intent_type == IntentType.RECHECK_TOOL:
         return RecheckToolCommand(
             tool_registry=container.tool_registry,
@@ -454,6 +514,11 @@ def _resolve_command(intent_type: IntentType, container):
         )
     elif intent_type == IntentType.SAVE_STRATEGY:
         return SaveStrategyCommand(
+            session_manager=container.session_manager,
+            state_machine=container.state_machine,
+        )
+    elif intent_type == IntentType.COMPLETE:
+        return CompleteDiagnosisCommand(
             session_manager=container.session_manager,
             state_machine=container.state_machine,
         )

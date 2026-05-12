@@ -38,7 +38,9 @@ class ExcludeToolCommand(Command):
         self._validate_tool_exists(tool_name)
 
         self.session_manager.exclude_tool(session.session_id, tool_name)
-        self.session_manager.transition(session.session_id, SessionStatus.EXCLUDED)
+        # 保持在 MODIFYING 状态，用户可以继续调整或重新诊断
+        if session.status != SessionStatus.MODIFYING:
+            self.session_manager.transition(session.session_id, SessionStatus.MODIFYING)
 
         logger.info(f"已排除工具: {session.session_id} -> {tool_name}")
 

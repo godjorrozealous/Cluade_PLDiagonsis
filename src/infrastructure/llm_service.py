@@ -1,11 +1,11 @@
 """LLM 服务封装
 
-提供统一的 LLM 调用接口，支持结构化输出。
+提供统一的 LLM 调用接口，支持结构化输出和流式输出。
 """
 
 import json
 import logging
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, AsyncIterator, Dict, Optional, Type, TypeVar
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel
@@ -41,6 +41,24 @@ class LLMService:
         except Exception as e:
             logger.error(f"LLM 调用失败: {e}")
             raise LLMServiceError(f"LLM 调用失败: {str(e)}")
+
+    async def stream_chat(self, messages: list[dict], **kwargs) -> AsyncIterator[str]:
+        """流式对话，逐字返回 LLM 输出"""
+        try:
+            stream = await self.client.chat.completions.create(
+                model=self.config.model,
+                messages=messages,
+                temperature=kwargs.get("temperature", self.config.temperature),
+                max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+        except Exception as e:
+            logger.error(f"LLM 流式调用失败: {e}")
+            raise LLMServiceError(f"LLM 流式调用失败: {str(e)}")
 
     async def structured_output(
         self, messages: list[dict], output_schema: Type[T], **kwargs

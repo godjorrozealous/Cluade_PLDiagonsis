@@ -19,4 +19,6 @@ export interface ChatMessage {
   content: string
   eventType?: SSEEvent['event_type']
   timestamp: string
+  thinking?: string
+  thinkingCollapsed?: boolean
 }

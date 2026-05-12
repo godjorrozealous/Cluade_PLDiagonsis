@@ -2,6 +2,7 @@
 import { ref, nextTick, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { renderMarkdown } from '@/utils/markdown'
+import type { ChatMessage } from '@/types'
 
 const store = useSessionStore()
 const input = ref('')
@@ -36,6 +37,10 @@ function bubbleClass(role: string, eventType?: string): string {
   if (eventType === 'thinking') return 'bubble-thinking'
   return 'bubble-assistant'
 }
+
+function toggleThinking(msg: ChatMessage) {
+  msg.thinkingCollapsed = !msg.thinkingCollapsed
+}
 </script>
 
 <template>
@@ -55,11 +60,30 @@ function bubbleClass(role: string, eventType?: string): string {
             <span class="spinner"></span>
             <span>{{ msg.content }}</span>
           </div>
-          <div
-            v-else-if="msg.role === 'assistant'"
-            class="markdown-body"
-            v-html="renderMarkdown(msg.content)"
-          ></div>
+          <div v-else-if="msg.role === 'assistant'">
+            <div
+              v-if="msg.thinking && msg.thinking.trim()"
+              class="thinking-block"
+            >
+              <button
+                class="thinking-toggle"
+                @click="toggleThinking(msg)"
+              >
+                <span class="toggle-icon" :class="{ collapsed: msg.thinkingCollapsed }">▼</span>
+                <span>思考过程</span>
+              </button>
+              <div
+                v-show="!msg.thinkingCollapsed"
+                class="thinking-content"
+              >
+                <pre>{{ msg.thinking }}</pre>
+              </div>
+            </div>
+            <div
+              class="markdown-body"
+              v-html="renderMarkdown(msg.content)"
+            ></div>
+          </div>
           <div v-else>{{ msg.content }}</div>
         </div>
         <div class="msg-time">
@@ -186,6 +210,58 @@ function bubbleClass(role: string, eventType?: string): string {
   to {
     transform: rotate(360deg);
   }
+}
+
+.thinking-block {
+  margin-bottom: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.375rem 0.625rem;
+  background: transparent;
+  border: none;
+  font-size: 0.8125rem;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.thinking-toggle:hover {
+  background: #f1f5f9;
+}
+
+.toggle-icon {
+  display: inline-block;
+  font-size: 0.625rem;
+  transition: transform 0.2s;
+}
+
+.toggle-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
+.thinking-content {
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.thinking-content pre {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #475569;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .msg-time {

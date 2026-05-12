@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DiagnosisSession, ChatMessage } from '@/types'
-import { getSessions, switchSession } from '@/api/http'
+import { getSessions, switchSession, completeSession } from '@/api/http'
 import { sendMessage } from '@/api/sse'
 
 export const useSessionStore = defineStore('session', () => {
@@ -65,11 +65,16 @@ export const useSessionStore = defineStore('session', () => {
         assistantMsg.eventType = event.event_type
 
         if (event.event_type === 'thinking') {
-          assistantMsg.content = event.payload?.message ?? '思考中...'
+          const msg = event.payload?.message ?? '思考中...'
+          assistantMsg.content = msg
+          assistantMsg.thinking = (assistantMsg.thinking ?? '') + msg
         } else if (event.event_type === 'result' || event.event_type === 'content') {
           assistantMsg.content += event.payload?.content ?? ''
         } else if (event.event_type === 'complete') {
           assistantMsg.content = event.payload?.report ?? assistantMsg.content
+          if (event.payload?.thinking) {
+            assistantMsg.thinking = event.payload.thinking
+          }
         } else if (event.event_type === 'error') {
           assistantMsg.content = `错误: ${event.payload?.message ?? '未知错误'}`
           error.value = assistantMsg.content
@@ -94,6 +99,23 @@ export const useSessionStore = defineStore('session', () => {
     messages.value = []
   }
 
+  async function markSessionComplete() {
+    const sessionId = activeSessionId.value
+    if (!sessionId) return
+    try {
+      error.value = null
+      const data = await completeSession(sessionId)
+      if (data.success) {
+        const idx = sessions.value.findIndex((s) => s.session_id === sessionId)
+        if (idx !== -1) {
+          sessions.value[idx].status = 'completed'
+        }
+      }
+    } catch (err) {
+      error.value = (err as Error).message
+    }
+  }
+
   return {
     sessions,
     activeSessionId,
@@ -105,5 +127,6 @@ export const useSessionStore = defineStore('session', () => {
     selectSession,
     postMessage,
     clearMessages,
+    markSessionComplete,
   }
 })

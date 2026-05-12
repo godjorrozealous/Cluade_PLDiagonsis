@@ -13,12 +13,29 @@ const reportContent = computed(() => {
 })
 
 const hasReport = computed(() => !!reportContent.value)
+
+const canComplete = computed(() => {
+  const session = store.activeSession
+  return session && (session.status === 'modifying' || session.status === 'excluded')
+})
+
+async function handleComplete() {
+  await store.markSessionComplete()
+}
 </script>
 
 <template>
   <section class="report-panel">
     <header class="report-header">
       <h3>诊断报告</h3>
+      <button
+        v-if="canComplete"
+        class="complete-btn"
+        @click="handleComplete"
+        :disabled="store.isLoading"
+      >
+        完成诊断
+      </button>
     </header>
 
     <div v-if="hasReport" class="report-body markdown-body" v-html="renderMarkdown(reportContent)"></div>
@@ -41,6 +58,9 @@ const hasReport = computed(() => !!reportContent.value)
 .report-header {
   padding: 1rem 1.25rem;
   border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .report-header h3 {
@@ -48,6 +68,27 @@ const hasReport = computed(() => !!reportContent.value)
   font-size: 0.9375rem;
   font-weight: 600;
   color: #0f172a;
+}
+
+.complete-btn {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.complete-btn:hover:not(:disabled) {
+  background: #059669;
+}
+
+.complete-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .report-body {
