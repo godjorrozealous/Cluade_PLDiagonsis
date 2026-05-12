@@ -3,7 +3,7 @@
 import logging
 from typing import AsyncIterator
 
-from src.core.models import DiagnosisSummary, Event, ExecutionContext, SessionStatus
+from src.core.models import DiagnosisSummary, Event, ExecutionContext, SessionStatus, UserAction
 from src.core.exceptions import InvalidStateError, WeightValidationError
 from src.application.commands.base import Command
 from src.domain.session_manager import SessionManager
@@ -48,6 +48,12 @@ class AdjustWeightCommand(Command):
 
         self.session_manager.update_weights(
             session.session_id, {tool_name: new_weight}
+        )
+        session.action_log.append(
+            UserAction(
+                action_type="adjust_weight",
+                parameters={"tool_name": tool_name, "weight": new_weight},
+            )
         )
 
         updated_summary = self._maybe_recompute(session)

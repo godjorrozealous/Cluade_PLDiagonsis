@@ -3,7 +3,7 @@
 import logging
 from typing import AsyncIterator
 
-from src.core.models import Event, ExecutionContext, SessionStatus
+from src.core.models import Event, ExecutionContext, SessionStatus, UserAction
 from src.core.exceptions import InvalidStateError, ToolNotFoundError
 from src.application.commands.base import Command
 from src.domain.session_manager import SessionManager
@@ -38,6 +38,12 @@ class ExcludeToolCommand(Command):
         self._validate_tool_exists(tool_name)
 
         self.session_manager.exclude_tool(session.session_id, tool_name)
+        session.action_log.append(
+            UserAction(
+                action_type="exclude",
+                parameters={"tool_name": tool_name},
+            )
+        )
         # 保持在 MODIFYING 状态，用户可以继续调整或重新诊断
         if session.status != SessionStatus.MODIFYING:
             self.session_manager.transition(session.session_id, SessionStatus.MODIFYING)

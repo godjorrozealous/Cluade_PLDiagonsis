@@ -6,7 +6,7 @@
 import logging
 from typing import AsyncIterator
 
-from src.core.models import Event, ExecutionContext
+from src.core.models import Event, ExecutionContext, UserAction
 from src.core.exceptions import InvalidStateError
 from src.application.commands.base import Command
 from src.domain.session_manager import SessionManager
@@ -40,6 +40,12 @@ class IncludeToolCommand(Command):
         self._validate_state(session)
 
         self.session_manager.include_tool(session.session_id, tool_name)
+        session.action_log.append(
+            UserAction(
+                action_type="include",
+                parameters={"tool_name": tool_name},
+            )
+        )
 
         logger.info(f"已恢复工具: {session.session_id} -> {tool_name}")
 

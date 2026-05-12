@@ -21,10 +21,12 @@ from src.core.models import (
     IntentType,
     SessionStatus,
     ToolOutput,
+    UserAction,
 )
 from src.application.commands.adjust_weight import AdjustWeightCommand, WEIGHT_MIN, WEIGHT_MAX
 from src.application.commands.diagnose import DiagnoseCommand
 from src.application.commands.exclude import ExcludeToolCommand
+from src.application.commands.include_tool import IncludeToolCommand
 from src.application.commands.recheck import RecheckToolCommand
 from src.application.commands.save_strategy import SaveStrategyCommand
 
@@ -87,6 +89,10 @@ async def test_adjust_weight_success(adjust_command: AdjustWeightCommand) -> Non
     assert events[0].event_type == EventType.THINKING
     assert events[1].event_type == EventType.COMPLETE
     adjust_command.session_manager.update_weights.assert_called_once_with("s1", {"ToolA": 1.5})
+    assert len(session.action_log) == 1
+    assert session.action_log[0].action_type == "adjust_weight"
+    assert session.action_log[0].parameters["tool_name"] == "ToolA"
+    assert session.action_log[0].parameters["weight"] == 1.5
 
 
 @pytest.mark.asyncio
@@ -236,6 +242,9 @@ async def test_exclude_tool_success(exclude_command: ExcludeToolCommand) -> None
     exclude_command.session_manager.exclude_tool.assert_called_once_with("s1", "ToolA")
     # When already in MODIFYING, no transition is triggered
     exclude_command.session_manager.transition.assert_not_called()
+    assert len(session.action_log) == 1
+    assert session.action_log[0].action_type == "exclude"
+    assert session.action_log[0].parameters["tool_name"] == "ToolA"
 
 
 @pytest.mark.asyncio
@@ -271,6 +280,43 @@ async def test_exclude_tool_invalid_state(exclude_command: ExcludeToolCommand) -
         [e async for e in exclude_command.execute(ctx)]
 
 
+
+
+# ============================================================================
+# IncludeToolCommand
+# ============================================================================
+
+
+@pytest.fixture
+def include_command() -> IncludeToolCommand:
+    """Return an IncludeToolCommand with mocked dependencies."""
+    mock_session_manager = MagicMock()
+    mock_state_machine = MagicMock()
+    mock_state_machine.can_execute.return_value = True
+    return IncludeToolCommand(mock_session_manager, mock_state_machine)
+
+
+@pytest.mark.asyncio
+async def test_include_tool_success(include_command: IncludeToolCommand) -> None:
+    """include_tool executes successfully with valid params."""
+    session = DiagnosisSession(session_id="s1", line_name="京西线", status=SessionStatus.MODIFYING)
+    session.excluded_tools = ["ToolA"]
+    intent = Intent(
+        intent_type=IntentType.INCLUDE_TOOL,
+        confidence=0.9,
+        parameters={"tool_name": "ToolA"},
+    )
+    ctx = _make_context(session, intent=intent)
+
+    events = [e async for e in include_command.execute(ctx)]
+
+    assert len(events) == 2
+    assert events[0].event_type == EventType.THINKING
+    assert events[1].event_type == EventType.COMPLETE
+    include_command.session_manager.include_tool.assert_called_once_with("s1", "ToolA")
+    assert len(session.action_log) == 1
+    assert session.action_log[0].action_type == "include"
+    assert session.action_log[0].parameters["tool_name"] == "ToolA"
 # ============================================================================
 # SaveStrategyCommand
 # ============================================================================
