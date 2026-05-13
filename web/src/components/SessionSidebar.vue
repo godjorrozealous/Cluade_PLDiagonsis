@@ -43,7 +43,7 @@ function statusLabel(status: string): string {
 <template>
   <aside class="sidebar">
     <header class="sidebar-header">
-      <h2>会话列表</h2>
+      <h2>诊断列表</h2>
       <button class="refresh-btn" @click="store.loadSessions" title="刷新">
         &#x21bb;
       </button>
