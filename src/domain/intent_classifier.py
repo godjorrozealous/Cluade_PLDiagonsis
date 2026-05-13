@@ -79,7 +79,7 @@ class IntentClassifier:
 - load_strategy: 加载策略
 - general: 通用对话
 
-工具名称映射规则（参数中tool_name必须为标准名称）：
+工具名称映射规则（参数中tool_name/tool_names必须为标准名称）：
 - 雷电、雷击 -> LightningDiagnosisTool
 - 覆冰、结冰 -> IcingDiagnosisTool
 - 风偏、大风 -> WindDiagnosisTool
@@ -90,7 +90,13 @@ class IntentClassifier:
 {{
     "intent_type": "意图类型",
     "confidence": 0.95,
-    "parameters": {{"tool_name": "标准工具名"}}
+    "parameters": {{"tool_name": "标准工具名"}}  // 单工具用 tool_name
+}}
+或（多工具排除/恢复时）：
+{{
+    "intent_type": "exclude_tool",
+    "confidence": 0.95,
+    "parameters": {{"tool_names": ["LightningDiagnosisTool", "IcingDiagnosisTool"]}}
 }}
 """
 
