@@ -173,6 +173,32 @@ class SessionManager:
             self._persist()
             logger.info(f"恢复工具: {session_id} -> {tool_name}")
 
+    def exclude_tools(self, session_id: str, tool_names: List[str]) -> None:
+        """批量排除工具"""
+        session = self.get(session_id)
+        changed = False
+        for tool_name in tool_names:
+            if tool_name not in session.excluded_tools:
+                session.excluded_tools.append(tool_name)
+                changed = True
+        if changed:
+            session.updated_at = datetime.now()
+            self._persist()
+            logger.info(f"批量排除工具: {session_id} -> {tool_names}")
+
+    def include_tools(self, session_id: str, tool_names: List[str]) -> None:
+        """批量恢复工具"""
+        session = self.get(session_id)
+        changed = False
+        for tool_name in tool_names:
+            if tool_name in session.excluded_tools:
+                session.excluded_tools.remove(tool_name)
+                changed = True
+        if changed:
+            session.updated_at = datetime.now()
+            self._persist()
+            logger.info(f"批量恢复工具: {session_id} -> {tool_names}")
+
     def add_rechecked(self, session_id: str, tool_name: str) -> None:
         """记录重新检查"""
         session = self.get(session_id)

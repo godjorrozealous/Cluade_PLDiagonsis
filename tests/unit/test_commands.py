@@ -239,7 +239,7 @@ async def test_exclude_tool_success(exclude_command: ExcludeToolCommand) -> None
     assert len(events) == 2
     assert events[0].event_type == EventType.THINKING
     assert events[1].event_type == EventType.COMPLETE
-    exclude_command.session_manager.exclude_tool.assert_called_once_with("s1", "ToolA")
+    exclude_command.session_manager.exclude_tools.assert_called_once_with("s1", ["ToolA"])
     # When already in MODIFYING, no transition is triggered
     exclude_command.session_manager.transition.assert_not_called()
     assert len(session.action_log) == 1
@@ -313,7 +313,7 @@ async def test_include_tool_success(include_command: IncludeToolCommand) -> None
     assert len(events) == 2
     assert events[0].event_type == EventType.THINKING
     assert events[1].event_type == EventType.COMPLETE
-    include_command.session_manager.include_tool.assert_called_once_with("s1", "ToolA")
+    include_command.session_manager.include_tools.assert_called_once_with("s1", ["ToolA"])
     assert len(session.action_log) == 1
     assert session.action_log[0].action_type == "include"
     assert session.action_log[0].parameters["tool_name"] == "ToolA"

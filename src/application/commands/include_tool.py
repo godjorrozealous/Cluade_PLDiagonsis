@@ -4,7 +4,7 @@
 """
 
 import logging
-from typing import AsyncIterator
+from typing import AsyncIterator, List
 
 from src.core.models import Event, ExecutionContext, UserAction
 from src.core.exceptions import InvalidStateError
@@ -33,38 +33,43 @@ class IncludeToolCommand(Command):
     async def execute(self, ctx: ExecutionContext) -> AsyncIterator[Event]:
         """执行恢复工具操作"""
         session = ctx.session
-        tool_name = self._extract_tool_name(ctx)
+        tool_names = self._extract_tool_names(ctx)
 
-        yield Event.thinking(session.session_id, f"准备恢复工具: {tool_name}...")
+        yield Event.thinking(session.session_id, f"准备恢复工具: {', '.join(tool_names)}...")
 
         self._validate_state(session)
 
-        self.session_manager.include_tool(session.session_id, tool_name)
-        session.action_log.append(
-            UserAction(
-                action_type="include",
-                parameters={"tool_name": tool_name},
+        self.session_manager.include_tools(session.session_id, tool_names)
+        for tool_name in tool_names:
+            session.action_log.append(
+                UserAction(
+                    action_type="include",
+                    parameters={"tool_name": tool_name},
+                )
             )
-        )
 
-        logger.info(f"已恢复工具: {session.session_id} -> {tool_name}")
+        logger.info(f"已恢复工具: {session.session_id} -> {tool_names}")
 
         yield Event.complete(
             session.session_id,
             {
-                "message": f"已恢复工具: {tool_name}",
+                "message": f"已恢复工具: {', '.join(tool_names)}",
                 "excluded_tools": session.excluded_tools,
                 "status": session.status.value,
             },
         )
 
-    def _extract_tool_name(self, ctx: ExecutionContext) -> str:
-        """从意图参数中提取工具名"""
+    def _extract_tool_names(self, ctx: ExecutionContext) -> List[str]:
+        """从意图参数中提取工具名列表"""
         if ctx.intent:
-            tool_name = ctx.intent.parameters.get("tool_name", "")
+            params = ctx.intent.parameters
+            tool_names = params.get("tool_names", [])
+            if tool_names:
+                return tool_names
+            tool_name = params.get("tool_name", "")
             if tool_name:
-                return tool_name
-        raise InvalidStateError("缺少 tool_name 参数")
+                return [tool_name]
+        raise InvalidStateError("缺少 tool_name/tool_names 参数")
 
     def _validate_state(self, session) -> None:
         """验证当前状态是否允许恢复操作"""
