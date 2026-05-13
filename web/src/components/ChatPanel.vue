@@ -38,10 +38,6 @@ function bubbleClass(role: string, eventType?: string): string {
   return 'bubble-assistant'
 }
 
-function toggleThinking(msg: ChatMessage) {
-  msg.thinkingCollapsed = !msg.thinkingCollapsed
-}
-
 function handleViewReport(msg: ChatMessage) {
   if (msg.report) {
     store.openReport(msg.report)
@@ -78,7 +74,7 @@ function handleCompleteDiagnosis() {
             class="thinking"
           >
             <span class="spinner"></span>
-            <span>{{ msg.content }}</span>
+            <span>诊断中...</span>
           </div>
 
           <!-- Complete state with summary card -->
@@ -111,24 +107,6 @@ function handleCompleteDiagnosis() {
 
           <!-- Regular assistant message -->
           <div v-else-if="msg.role === 'assistant'">
-            <div
-              v-if="msg.thinking && msg.thinking.trim()"
-              class="thinking-block"
-            >
-              <button
-                class="thinking-toggle"
-                @click="toggleThinking(msg)"
-              >
-                <span class="toggle-icon" :class="{ collapsed: msg.thinkingCollapsed }">&#9660;</span>
-                <span>思考过程</span>
-              </button>
-              <div
-                v-show="!msg.thinkingCollapsed"
-                class="thinking-content"
-              >
-                <pre>{{ msg.thinking }}</pre>
-              </div>
-            </div>
             <div
               class="markdown-body"
               v-html="renderMarkdown(msg.content)"

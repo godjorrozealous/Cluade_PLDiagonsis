@@ -160,5 +160,5 @@ class ReportComposer:
         return {
             "fault_type": best_fault_type,
             "confidence": round(best_confidence, 2),
-            "primary_tool": best_tool,
+            "primary_tool": best_tool or "unknown",
         }
