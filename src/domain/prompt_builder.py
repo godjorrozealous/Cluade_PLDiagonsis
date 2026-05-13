@@ -127,9 +127,10 @@ class PromptBuilder:
                 parts.append(f"- {tool_name}: {weight}")
 
         if session.excluded_tools:
-            parts.append("### 已排除工具")
+            parts.append("### 已排除工具（以下工具已被用户明确排除，诊断计划中禁止调用）")
             for tool_name in session.excluded_tools:
                 parts.append(f"- {tool_name}")
+            parts.append("注意：已排除的工具绝对不能出现在 tools_to_call 列表中。")
 
         if session.included_tools:
             parts.append("### 已包含工具")
