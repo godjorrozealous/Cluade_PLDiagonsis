@@ -239,8 +239,9 @@ class Event(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
 
     @classmethod
-    def start(cls, session_id: str, message: str = "开始处理...") -> Event:
-        return cls(session_id=session_id, event_type=EventType.START, payload={"message": message})
+    def start(cls, session_id: str, message: str | dict = "开始处理...") -> Event:
+        payload = message if isinstance(message, dict) else {"message": message}
+        return cls(session_id=session_id, event_type=EventType.START, payload=payload)
 
     @classmethod
     def thinking(cls, session_id: str, message: str) -> Event:

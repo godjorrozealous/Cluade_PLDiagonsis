@@ -89,7 +89,7 @@ export const useSessionStore = defineStore('session', () => {
         if (event.event_type === 'thinking') {
           const msg = event.payload?.message ?? '思考中...'
           assistantMsg.content = msg
-          assistantMsg.thinking = (assistantMsg.thinking ?? '') + msg
+          assistantMsg.thinking = msg
         } else if (event.event_type === 'result' || event.event_type === 'content') {
           assistantMsg.content += event.payload?.content ?? ''
         } else if (event.event_type === 'status') {
@@ -129,9 +129,10 @@ export const useSessionStore = defineStore('session', () => {
             (s) => s.session_id === event.session_id
           )
           if (existingIdx === -1) {
+            const lineName = event.payload?.line_name ?? '新会话'
             sessions.value.push({
               session_id: event.session_id,
-              line_name: '新会话',
+              line_name: lineName,
               status: event.payload?.status ?? 'pending',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),

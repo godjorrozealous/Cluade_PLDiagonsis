@@ -25,6 +25,7 @@ from src.application.commands.save_strategy import SaveStrategyCommand
 from src.application.commands.complete_diagnosis import CompleteDiagnosisCommand
 from src.application.context import ContextBuilder
 from src.interfaces.dependency_injection import get_container
+from src.infrastructure.fault_parser import FaultContextParser
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,9 @@ def create_app() -> Flask:
 
             # 2. 获取会话：诊断类意图从消息中提取线路，其他意图使用活跃会话
             if intent_type == IntentType.DIAGNOSE:
-                session = container.session_manager.get_or_create(message)
+                fault_ctx = FaultContextParser.parse(message, "")
+                line_name = fault_ctx.line_name or message
+                session = container.session_manager.get_or_create(line_name)
             else:
                 session = container.session_manager.get_active()
                 if session is None:
@@ -106,6 +109,12 @@ def create_app() -> Flask:
                     )
                     return
 
+            yield _sse_event(
+                Event.start(
+                    session.session_id,
+                    {"message": "开始诊断...", "line_name": session.line_name},
+                )
+            )
             yield _sse_event(Event.thinking(session.session_id, "理解用户意图..."))
 
             # 重新分类（带会话上下文）以获得更准确的参数提取
