@@ -206,6 +206,8 @@ class MCPToolAdapter(ToolAdapter):
                 "latitude": 30.5928,
                 "current": 45.2,
                 "distance_to_line": 1.2,
+                "fault_type": "雷击故障",
+                "confidence": 0.85,
             },
             "IcingDiagnosisTool": {
                 "temperature": -2.5,
@@ -213,18 +215,24 @@ class MCPToolAdapter(ToolAdapter):
                 "wind_speed": 8.5,
                 "icing_thickness": 5.2,
                 "icing_risk_level": "高",
+                "fault_type": "覆冰故障",
+                "confidence": 0.72,
             },
             "WindDiagnosisTool": {
                 "max_wind_speed": 22.5,
                 "wind_direction": "西北",
                 "gust_speed": 28.0,
                 "deflection_risk": "中",
+                "fault_type": "风偏故障",
+                "confidence": 0.60,
             },
             "BirdDamageDiagnosisTool": {
                 "bird_species_count": 12,
                 "activity_level": "高",
                 "nesting_sites": 3,
                 "damage_history": "2024年3月曾发生鸟害导致的跳闸",
+                "fault_type": "鸟害故障",
+                "confidence": 0.55,
             },
         }
         return mock_data.get(self.name, {"result": "暂无数据"})
