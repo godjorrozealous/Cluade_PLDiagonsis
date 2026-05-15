@@ -132,7 +132,7 @@ class RecheckToolCommand(Command):
             return self._compute_from_single(tool_name, new_output, ctx)
 
         tool_outputs = self._gather_outputs(current, tool_name, new_output)
-        weights = ctx.diagnosis_ctx.weights or session.active_weights
+        weights = getattr(ctx.diagnosis_ctx, 'weights', None) or ctx.session.active_weights
         return self.weight_engine.compute(tool_outputs, weights)
 
     def _gather_outputs(self, current, tool_name, new_output):
