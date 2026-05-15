@@ -89,8 +89,20 @@ def create_app() -> Flask:
         finally:
             loop.close()
 
+    def _append_chat_message(session, role: str, content: str, event_type: str = None):
+        """追加聊天记录到会话"""
+        msg = {
+            "role": role,
+            "content": content,
+            "timestamp": datetime.now().isoformat(),
+        }
+        if event_type:
+            msg["event_type"] = event_type
+        session.chat_history.append(msg)
+
     async def _chat_stream(message: str):
         """聊天流生成器（异步）"""
+        session = None
         try:
             # 1. 意图识别（先识别意图，再决定如何获取会话）
             intent = await container.intent_classifier.classify(message, None)
@@ -100,7 +112,9 @@ def create_app() -> Flask:
             if intent_type == IntentType.DIAGNOSE:
                 fault_ctx = FaultContextParser.parse(message, "")
                 line_name = fault_ctx.line_name or message
-                session = container.session_manager.get_or_create(line_name)
+                session = container.session_manager.get_or_create(
+                    line_name, fault_context=fault_ctx
+                )
             else:
                 session = container.session_manager.get_active()
                 if session is None:
@@ -108,6 +122,9 @@ def create_app() -> Flask:
                         Event.error("", "没有活跃的会话，请先开始诊断")
                     )
                     return
+
+            # 保存用户消息
+            _append_chat_message(session, "user", message)
 
             yield _sse_event(
                 Event.start(
@@ -128,6 +145,13 @@ def create_app() -> Flask:
             if cmd is not None:
                 async for event in cmd.execute(ctx):
                     yield _sse_event(event)
+                    if event.event_type in (EventType.COMPLETE, EventType.ERROR):
+                        _append_chat_message(
+                            session,
+                            "assistant",
+                            event.payload.get("message", ""),
+                            event.event_type.value,
+                        )
 
                 # 自动链式诊断：排除/恢复工具后无条件自动重新诊断
                 if intent_type in (IntentType.EXCLUDE_TOOL, IntentType.INCLUDE_TOOL):
@@ -147,19 +171,31 @@ def create_app() -> Flask:
                     )
                     async for event in diagnose_cmd.execute(ctx):
                         yield _sse_event(event)
+                        if event.event_type in (EventType.COMPLETE, EventType.ERROR):
+                            _append_chat_message(
+                                session,
+                                "assistant",
+                                event.payload.get("message", ""),
+                                event.event_type.value,
+                            )
             else:
-                # 通用对话
-                response = await container.llm_service.chat(
-                    [
-                        {"role": "system", "content": "你是输电线路故障诊断助手。"},
-                        {"role": "user", "content": message},
-                    ]
+                # 非诊断相关对话，提示用户
+                hint = (
+                    "您好，我是输电线路故障综合诊断智能体，专注于输电线路跳闸等故障的诊断分析。"
+                    "请提供线路名称、电压等级及故障时间等信息，我将为您进行专业诊断。"
                 )
-                yield _sse_event(Event.complete(session.session_id, {"message": response}))
+                yield _sse_event(Event.complete(session.session_id, {"message": hint}))
+                _append_chat_message(session, "assistant", hint, EventType.COMPLETE.value)
+
+            # 持久化聊天记录
+            container.session_manager._persist()
 
         except Exception as e:
             logger.error(f"处理失败: {e}")
             yield _sse_event(Event.error("", str(e)))
+            if session:
+                _append_chat_message(session, "assistant", str(e), EventType.ERROR.value)
+                container.session_manager._persist()
 
     # ------------------------------------------------------------------
     # REST API
@@ -168,20 +204,29 @@ def create_app() -> Flask:
     def list_sessions():
         """获取会话列表"""
         sessions = container.session_manager.list_sessions()
-        return jsonify(
-            {
-                "sessions": [
-                    {
-                        "id": s.session_id,
-                        "line_name": s.line_name,
-                        "status": s.status.value,
-                        "created_at": s.created_at.isoformat(),
-                        "updated_at": s.updated_at.isoformat(),
-                    }
-                    for s in sessions
-                ]
-            }
-        )
+        result = []
+        for s in sessions:
+            voltage_level = ""
+            fault_time = ""
+            if s.current_summary and s.current_summary.fault_context:
+                voltage_level = (
+                    s.current_summary.fault_context.additional_info.get("voltage_level", "")
+                    or ""
+                )
+                if s.current_summary.fault_context.fault_time:
+                    fault_time = s.current_summary.fault_context.fault_time.isoformat()
+            result.append(
+                {
+                    "session_id": s.session_id,
+                    "line_name": s.line_name,
+                    "status": s.status.value,
+                    "voltage_level": voltage_level,
+                    "fault_time": fault_time,
+                    "created_at": s.created_at.isoformat(),
+                    "updated_at": s.updated_at.isoformat(),
+                }
+            )
+        return jsonify({"sessions": result})
 
     @app.route("/api/sessions/<id>/switch", methods=["POST"])
     def switch_session(id: str):
@@ -249,6 +294,13 @@ def create_app() -> Flask:
                     "fault_type": primary.fault_type if primary else "未知",
                     "confidence": primary.confidence if primary else 0,
                     "report": session.latest_report,
+                    "line_name": session.line_name,
+                    "voltage_level": (
+                        session.current_summary.fault_context.additional_info.get("voltage_level", "")
+                        if session.current_summary.fault_context
+                        and session.current_summary.fault_context.additional_info
+                        else ""
+                    ),
                 }
             return jsonify(
                 {
@@ -261,6 +313,17 @@ def create_app() -> Flask:
                     "excluded_tools": session.excluded_tools,
                     "rechecked_tools": session.rechecked_tools,
                     "latest_summary": latest_summary,
+                    "chat_history": session.chat_history,
+                    "action_log": [
+                        {
+                            "action_type": a.action_type,
+                            "tool_name": a.parameters.get("tool_name", ""),
+                            "description": a.parameters.get("description", ""),
+                            "weight": a.parameters.get("weight"),
+                            "timestamp": a.timestamp.isoformat(),
+                        }
+                        for a in session.action_log
+                    ],
                     "summaries": [
                         {
                             "version": s.version,
@@ -358,7 +421,7 @@ def create_app() -> Flask:
         skills = []
         for name in skill_names:
             try:
-                content = container.skill_loader.load(name)
+                content, _ = container.skill_loader.load(name)
                 # 解析第一行标题作为描述
                 description = ""
                 for line in content.splitlines():

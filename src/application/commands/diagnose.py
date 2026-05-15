@@ -69,6 +69,10 @@ class DiagnoseCommand(Command):
         self.session_manager.transition(
             session.session_id, SessionStatus.DIAGNOSING
         )
+        yield Event.status(
+            session.session_id,
+            {"status": SessionStatus.DIAGNOSING.value},
+        )
 
         # 2. 解析故障上下文
         fault_context = self._parse_fault_context(ctx.user_message, session)
@@ -79,7 +83,7 @@ class DiagnoseCommand(Command):
         # 3. 加载诊断技能
         yield Event.thinking(session.session_id, "加载诊断技能...")
         skill_name = session.active_skill_name or "comprehensive_diagnosis"
-        skill_md = self.skill_loader.load(skill_name)
+        skill_md, _ = self.skill_loader.load(skill_name)
 
         # 4. 扫描诊断工具
         yield Event.thinking(session.session_id, "扫描诊断工具...")
@@ -143,7 +147,7 @@ class DiagnoseCommand(Command):
         # 9. 生成诊断报告
         yield Event.thinking(session.session_id, "生成诊断报告...")
         composed = await self.report_composer.compose(
-            tool_outputs, None, session.session_id
+            tool_outputs, None, session.session_id, fault_context
         )
         report = composed["report"]
         summary = composed["summary"]
@@ -169,6 +173,10 @@ class DiagnoseCommand(Command):
         # 11. 转换到可修改状态
         self.session_manager.transition(
             session.session_id, SessionStatus.MODIFYING
+        )
+        yield Event.status(
+            session.session_id,
+            {"status": SessionStatus.MODIFYING.value},
         )
 
         yield Event.complete(

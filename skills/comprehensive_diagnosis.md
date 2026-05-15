@@ -4,6 +4,16 @@
 
 针对输电线路跳闸故障的综合诊断，结合气象条件、历史数据和现场信息，自动判断故障原因并生成诊断报告。
 
+## 工具权重配置
+
+```yaml
+weights:
+  LightningDiagnosisTool: 1.0
+  IcingDiagnosisTool: 0.9
+  WindDiagnosisTool: 0.8
+  BirdDamageDiagnosisTool: 0.6
+```
+
 ## 推荐工具配置
 
 | 工具 | 权重 | 条件 |
