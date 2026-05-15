@@ -49,7 +49,16 @@ class RecheckToolCommand(Command):
         self._validate_state(session)
         self._validate_tool(tool_name)
 
+        # 清除该工具缓存，强制重新调用
+        if tool_name in session.tool_outputs_cache:
+            del session.tool_outputs_cache[tool_name]
+            logger.info(f"清除缓存: {tool_name}")
+
         self.session_manager.transition(session.session_id, SessionStatus.RECHECKING)
+        yield Event.status(
+            session.session_id,
+            {"status": SessionStatus.RECHECKING.value},
+        )
 
         fault_context = self._build_fault_context(session)
         yield Event.thinking(session.session_id, f"重新执行 {tool_name}...")
@@ -66,6 +75,10 @@ class RecheckToolCommand(Command):
         self.session_manager.add_summary(session.session_id, updated_summary)
 
         self.session_manager.transition(session.session_id, SessionStatus.MODIFYING)
+        yield Event.status(
+            session.session_id,
+            {"status": SessionStatus.MODIFYING.value},
+        )
 
         logger.info(f"重新检查完成: {session.session_id} -> {tool_name}")
 
