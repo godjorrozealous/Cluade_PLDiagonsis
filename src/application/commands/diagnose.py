@@ -59,6 +59,11 @@ class DiagnoseCommand(Command):
         """执行诊断"""
         session = ctx.session
 
+        # 全新诊断时清除缓存（必须在状态转换前检查）
+        is_fresh_diagnosis = session.status == SessionStatus.PENDING
+        if is_fresh_diagnosis:
+            session.tool_outputs_cache.clear()
+
         # 1. 验证状态并转换到诊断中
         if not self.state_machine.can_execute(session, "diagnose"):
             raise InvalidStateError(
@@ -138,10 +143,6 @@ class DiagnoseCommand(Command):
 
         planned_tools = plan.get("tools_to_call", [])
         planned_names = {t["name"] for t in planned_tools}
-
-        # 全新诊断时清除缓存
-        if session.status == SessionStatus.PENDING:
-            session.tool_outputs_cache.clear()
 
         # 分类：缓存复用 vs 需要调用
         cached_outputs = {}
