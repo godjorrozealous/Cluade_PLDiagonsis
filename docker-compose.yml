@@ -1,4 +1,39 @@
 services:
+  lightning-service:
+    build: ./mcp-services/lightning-service
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+
+  icing-service:
+    build: ./mcp-services/icing-service
+    ports:
+      - "8002:8002"
+    environment:
+      - PORT=8002
+
+  wind-service:
+    build: ./mcp-services/wind-service
+    ports:
+      - "8003:8003"
+    environment:
+      - PORT=8003
+
+  bird-service:
+    build: ./mcp-services/bird-service
+    ports:
+      - "8004:8004"
+    environment:
+      - PORT=8004
+
+  weather-service:
+    build: ./mcp-services/weather-service
+    ports:
+      - "8005:8005"
+    environment:
+      - PORT=8005
+
   pldiagnosis:
     build:
       context: .
@@ -19,6 +54,12 @@ services:
       - ./config:/app/config:ro
       - ./templates:/app/templates:ro
     restart: unless-stopped
+    depends_on:
+      - lightning-service
+      - icing-service
+      - wind-service
+      - bird-service
+      - weather-service
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
