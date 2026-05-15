@@ -19,9 +19,10 @@ def test_load_default_skill(tmp_path) -> None:
     skill_file.write_text(expected_content, encoding="utf-8")
 
     loader = SkillLoader(skills_dir=str(skills_dir))
-    result = loader.load("test_skill")
+    content, weights = loader.load("test_skill")
 
-    assert result == expected_content
+    assert content == expected_content
+    assert weights == {}
 
 
 def test_load_missing_skill_fallback(tmp_path) -> None:
@@ -30,9 +31,10 @@ def test_load_missing_skill_fallback(tmp_path) -> None:
     skills_dir.mkdir()
 
     loader = SkillLoader(skills_dir=str(skills_dir))
-    result = loader.load("nonexistent_skill")
+    content, weights = loader.load("nonexistent_skill")
 
-    assert result == DEFAULT_SKILL_CONTENT
+    assert content == DEFAULT_SKILL_CONTENT
+    assert weights == {}
 
 
 # ============================================================================
