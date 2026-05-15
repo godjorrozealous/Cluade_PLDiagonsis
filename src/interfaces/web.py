@@ -158,6 +158,18 @@ def create_app() -> Flask:
                     yield _sse_event(
                         Event.thinking(session.session_id, "自动重新诊断...")
                     )
+
+                    # 重建 diagnose 上下文（确保使用当前会话状态）
+                    from src.core.models import Intent
+                    diagnose_intent = Intent(
+                        intent_type=IntentType.DIAGNOSE,
+                        confidence=1.0,
+                        parameters={},
+                    )
+                    ctx = ContextBuilder.build(
+                        session, message, intent=diagnose_intent
+                    )
+
                     diagnose_cmd = DiagnoseCommand(
                         tool_registry=container.tool_registry,
                         session_manager=container.session_manager,
