@@ -6,11 +6,8 @@ tool:
   adapter:
     type: "mcp"
     config:
-      mcp_server: "weather-mcp-server"
-      tool_name: "query_wind"
-      # 可选：配置真实 MCP 服务器 URL
-      # 未配置时使用模拟数据（开发阶段）
-      # mcp_server_url: "http://localhost:3003"
+      url: "http://localhost:8003"
+      timeout: 30
   output_schema:
     type: "structured"
     fields:
