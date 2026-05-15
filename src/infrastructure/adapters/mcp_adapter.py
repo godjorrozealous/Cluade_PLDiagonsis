@@ -49,18 +49,19 @@ class MCPToolAdapter(ToolAdapter):
     async def execute(self, context: FaultContext) -> ToolOutput:
         """调用 MCP 服务"""
         client = await self._get_client()
+        fault_time = getattr(context, "fault_time", None)
         payload = {
             "line_name": context.line_name,
             "voltage_level": None,
-            "fault_time": context.fault_time.isoformat() if context.fault_time else None,
+            "fault_time": fault_time.isoformat() if fault_time else None,
             "additional_info": {
-                "line_id": context.line_id,
-                "tower_id": context.tower_id,
-                "weather_info": context.weather_info,
-                "scada_data": context.scada_data,
-                "wave_data": context.wave_data,
-                "images": context.images,
-                **context.additional_info,
+                "line_id": getattr(context, "line_id", None),
+                "tower_id": getattr(context, "tower_id", None),
+                "weather_info": getattr(context, "weather_info", None),
+                "scada_data": getattr(context, "scada_data", None),
+                "wave_data": getattr(context, "wave_data", None),
+                "images": getattr(context, "images", None),
+                **getattr(context, "additional_info", {}),
             },
         }
 
