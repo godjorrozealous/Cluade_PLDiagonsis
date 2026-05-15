@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from src.core.models import (
     DiagnosisSession,
     DiagnosisSummary,
+    FaultContext,
     SessionStatus,
 )
 from src.core.exceptions import SessionNotFoundError
@@ -56,7 +57,7 @@ class SessionManager:
     # ------------------------------------------------------------------
 
     def create(self, line_name: str) -> DiagnosisSession:
-        """创建新会话"""
+        """创建新会话，从当前激活技能加载权重"""
         normalized = LineNormalizer.normalize(line_name)
         session = DiagnosisSession(
             session_id=f"sess_{uuid.uuid4().hex[:8]}",
@@ -64,12 +65,31 @@ class SessionManager:
             status=SessionStatus.PENDING,
         )
         session.active_skill_name = self._default_skill_name
+
+        # 从技能文件加载权重
+        skill_weights = self._load_skill_weights(session.active_skill_name)
+        if skill_weights:
+            session.active_weights = skill_weights.copy()
+        else:
+            from src.core.models import DEFAULT_WEIGHTS
+            session.active_weights = DEFAULT_WEIGHTS.copy()
+
         self._sessions[session.session_id] = session
         self._active_session_id = session.session_id
 
         logger.info(f"创建会话: {session.session_id} ({normalized})")
         self._persist()
         return session
+
+    def _load_skill_weights(self, skill_name: str) -> dict[str, float]:
+        """从技能文件加载权重配置"""
+        try:
+            from src.domain.skill_loader import SkillLoader
+            loader = SkillLoader()
+            _, weights = loader.load(skill_name)
+            return weights
+        except Exception:
+            return {}
 
     def get(self, session_id: str) -> DiagnosisSession:
         """获取会话"""
@@ -83,23 +103,48 @@ class SessionManager:
             return None
         return self._sessions.get(self._active_session_id)
 
-    def get_or_create(self, line_name: str) -> DiagnosisSession:
+    def get_or_create(
+        self, line_name: str, fault_context: Optional[FaultContext] = None
+    ) -> DiagnosisSession:
         """获取或创建会话
 
-        同一线路（标准化后）且处于 pending 状态的会话会被复用。
-        已开始诊断的会话不再复用，避免状态冲突。
+        同一线路（标准化后）且未完成的会话会被复用。
+        如果提供了 fault_context，还会匹配电压等级和故障时间。
         """
         normalized = LineNormalizer.normalize(line_name)
 
-        # 查找现有 pending 会话
+        # 查找现有未完成会话
         for sess in self._sessions.values():
-            if (
-                LineNormalizer.normalize(sess.line_name) == normalized
-                and sess.status == SessionStatus.PENDING
-            ):
-                self._active_session_id = sess.session_id
-                logger.info(f"复用会话: {sess.session_id} ({normalized})")
-                return sess
+            if sess.status == SessionStatus.COMPLETED:
+                continue
+            if LineNormalizer.normalize(sess.line_name) != normalized:
+                continue
+
+            # 若提供了 fault_context，进行更精确匹配
+            if fault_context:
+                # 匹配电压等级
+                input_voltage = fault_context.additional_info.get("voltage_level", "")
+                sess_voltage = ""
+                if sess.current_summary and sess.current_summary.fault_context:
+                    sess_voltage = (
+                        sess.current_summary.fault_context.additional_info.get(
+                            "voltage_level", ""
+                        )
+                        or ""
+                    )
+                if input_voltage and sess_voltage and input_voltage != sess_voltage:
+                    continue
+
+                # 匹配故障时间（仅比较日期部分）
+                input_time = fault_context.fault_time
+                if input_time and sess.current_summary and sess.current_summary.fault_context:
+                    sess_time = sess.current_summary.fault_context.fault_time
+                    if sess_time and input_time.strftime("%Y-%m-%d") != sess_time.strftime("%Y-%m-%d"):
+                        continue
+
+            self._active_session_id = sess.session_id
+            logger.info(f"复用会话: {sess.session_id} ({normalized})")
+            return sess
 
         # 创建新会话
         return self.create(line_name)
