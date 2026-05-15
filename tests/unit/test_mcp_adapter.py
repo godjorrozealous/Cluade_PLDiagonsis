@@ -1,5 +1,6 @@
 """Tests for src/infrastructure/adapters/mcp_adapter.py — HTTP client mode."""
 
+import httpx
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -87,11 +88,11 @@ async def test_execute_returns_error_on_http_failure() -> None:
         "url": "http://localhost:8001",
     })
 
-    with patch("httpx.AsyncClient.post", side_effect=Exception("Connection refused")):
+    with patch("httpx.AsyncClient.post", side_effect=httpx.ConnectError("Connection refused")):
         context = FaultContext(line_id="L1", line_name="LineA")
         output = await adapter.execute(context)
 
-    assert output.structured_data["error"] == "Connection refused"
+    assert "Connection refused" in output.structured_data["error"]
     assert output.structured_data["fault_type"] == "未知"
     assert output.structured_data["confidence"] == 0.0
     assert output.metadata["error"] is True

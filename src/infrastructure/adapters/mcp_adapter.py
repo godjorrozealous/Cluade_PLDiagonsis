@@ -85,14 +85,6 @@ class MCPToolAdapter(ToolAdapter):
                 structured_data={"error": str(e), "fault_type": "未知", "confidence": 0.0},
                 metadata={"error": True},
             )
-        except Exception as e:
-            logger.error(f"MCP 服务未知错误 {self.name}: {e}")
-            return ToolOutput(
-                tool_name=self.name,
-                raw_text=f"工具调用失败: {e}",
-                structured_data={"error": str(e), "fault_type": "未知", "confidence": 0.0},
-                metadata={"error": True},
-            )
 
     async def close(self) -> None:
         if self._client:

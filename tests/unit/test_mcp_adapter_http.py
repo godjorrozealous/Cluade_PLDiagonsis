@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -51,9 +52,36 @@ async def test_adapter_execute_success(adapter):
 
 @pytest.mark.asyncio
 async def test_adapter_execute_http_error(adapter):
-    with patch("httpx.AsyncClient.post", side_effect=Exception("Connection refused")):
+    with patch("httpx.AsyncClient.post", side_effect=httpx.ConnectError("Connection refused")):
         ctx = FaultContext(line_id="line_1", line_name="武汉线")
         result = await adapter.execute(ctx)
 
-    assert result.structured_data["error"] == "Connection refused"
+    assert "Connection refused" in result.structured_data["error"]
     assert result.structured_data["confidence"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_adapter_execute_status_error(adapter):
+    """Test handling of HTTP 4xx/5xx responses"""
+    mock_response = MagicMock()
+    mock_response.json.return_value = {}
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "Server Error",
+        request=MagicMock(),
+        response=MagicMock(status_code=500),
+    )
+
+    with patch("httpx.AsyncClient.post", return_value=mock_response):
+        ctx = FaultContext(line_id="line_1", line_name="武汉线")
+        result = await adapter.execute(ctx)
+
+    assert isinstance(result, ToolOutput)
+    assert result.structured_data["confidence"] == 0.0
+    assert "error" in result.structured_data
+
+
+@pytest.mark.asyncio
+async def test_adapter_close_no_client(adapter):
+    """Test close() when client was never created"""
+    await adapter.close()
+    assert adapter._client is None
