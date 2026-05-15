@@ -195,7 +195,7 @@ class SessionManager:
     ) -> None:
         """更新会话权重"""
         session = self.get(session_id)
-        session.active_weights.update(weights)
+        session.active_weights = {**session.active_weights, **weights}
         session.updated_at = datetime.now()
         self._persist()
         logger.info(f"更新权重: {session_id} -> {weights}")
