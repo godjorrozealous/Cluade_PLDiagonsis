@@ -14,6 +14,7 @@ if [ "$MODE" = "dev" ]; then
 
     # 启动 MCP 服务
     echo "启动 MCP 服务..."
+    trap 'echo "停止 MCP 服务..."; kill $LIGHTNING_PID $ICING_PID $WIND_PID $BIRD_PID $WEATHER_PID 2>/dev/null || true' EXIT
     python3 mcp-services/lightning-service/main.py &
     LIGHTNING_PID=$!
     python3 mcp-services/icing-service/main.py &
@@ -50,10 +51,6 @@ if [ "$MODE" = "dev" ]; then
     export FLASK_DEBUG=true
     export FRONTEND_DIST=web/dist
     python3 web_app.py
-
-    # 清理 MCP 服务
-    echo "停止 MCP 服务..."
-    kill $LIGHTNING_PID $ICING_PID $WIND_PID $BIRD_PID $WEATHER_PID 2>/dev/null || true
 
 elif [ "$MODE" = "docker" ]; then
     echo "启动 Docker 环境..."

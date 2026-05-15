@@ -45,6 +45,11 @@ services:
       - FLASK_PORT=5000
       - FLASK_DEBUG=false
       - LOG_LEVEL=INFO
+      - LIGHTNING_URL=http://lightning-service:8001
+      - ICING_URL=http://icing-service:8002
+      - WIND_URL=http://wind-service:8003
+      - BIRD_URL=http://bird-service:8004
+      - WEATHER_URL=http://weather-service:8005
       # LLM 配置（根据实际环境修改）
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o}
