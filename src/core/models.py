@@ -208,6 +208,8 @@ class DiagnosisSession(BaseModel):
     action_log: List[UserAction] = Field(default_factory=list)
     latest_report: Optional[str] = None
     custom_strategy_name: Optional[str] = None
+    chat_history: List[Dict[str, Any]] = Field(default_factory=list)
+    tool_outputs_cache: Dict[str, Any] = Field(default_factory=dict, exclude=True)
 
     def model_post_init(self, __context: Any) -> None:
         """确保权重是独立副本"""

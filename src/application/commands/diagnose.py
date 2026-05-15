@@ -129,13 +129,49 @@ class DiagnoseCommand(Command):
             f"报告结构: {', '.join(plan.get('report_structure', []))}",
         )
 
-        # 7. 执行诊断工具
+        # 7. 执行诊断工具（带缓存复用）
         yield Event.thinking(session.session_id, "执行诊断工具...")
         diagnosis_ctx = DiagnosisContext(
             session_id=session.session_id,
             line_name=session.line_name,
         )
-        tool_outputs = await self.tool_executor.execute(plan, diagnosis_ctx)
+
+        planned_tools = plan.get("tools_to_call", [])
+        planned_names = {t["name"] for t in planned_tools}
+
+        # 全新诊断时清除缓存
+        if session.status == SessionStatus.PENDING:
+            session.tool_outputs_cache.clear()
+
+        # 分类：缓存复用 vs 需要调用
+        cached_outputs = {}
+        names_to_call = []
+
+        for tool_name in planned_names:
+            if tool_name in session.tool_outputs_cache:
+                cached_outputs[tool_name] = session.tool_outputs_cache[tool_name]
+                yield Event.thinking(
+                    session.session_id, f"复用 {tool_name} 历史数据..."
+                )
+            else:
+                names_to_call.append(tool_name)
+
+        # 只调用未缓存的工具
+        if names_to_call:
+            partial_plan = {
+                "tools_to_call": [t for t in planned_tools if t["name"] in names_to_call],
+                "parallel": plan.get("parallel", True),
+            }
+            new_outputs = await self.tool_executor.execute(partial_plan, diagnosis_ctx)
+        else:
+            new_outputs = {}
+
+        # 合并结果
+        tool_outputs = {**cached_outputs, **new_outputs}
+
+        # 新结果存入缓存
+        for name, output in new_outputs.items():
+            session.tool_outputs_cache[name] = output
 
         # 8. 输出每个工具的结果
         for name, output in tool_outputs.items():
