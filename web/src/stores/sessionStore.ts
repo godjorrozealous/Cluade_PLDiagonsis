@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DiagnosisSession, ChatMessage, DiagnosisSummary } from '@/types'
-import { getSessions, getSession, switchSession, completeSession, getSkillSummary } from '@/api/http'
+import { getSessions, getSession, switchSession, completeSession, getSkillSummary, clearSessions } from '@/api/http'
 import { sendMessage } from '@/api/sse'
 
 export const useSessionStore = defineStore('session', () => {
@@ -33,22 +33,50 @@ export const useSessionStore = defineStore('session', () => {
       const data = await switchSession(sessionId)
       if (data.success) {
         activeSessionId.value = sessionId
-        messages.value = []
 
         const sessionData = await getSession(sessionId)
-        const summary = sessionData.latest_summary
-        if (summary) {
+
+        // 恢复聊天记录
+        if (sessionData.chat_history && sessionData.chat_history.length > 0) {
+          messages.value = sessionData.chat_history.map((msg: any) => ({
+            id: crypto.randomUUID(),
+            role: msg.role,
+            content: msg.content,
+            eventType: msg.event_type || 'complete',
+            timestamp: msg.timestamp || new Date().toISOString(),
+            report: msg.report ?? undefined,
+            summary: msg.summary ?? undefined,
+          }))
+        } else {
+          messages.value = []
+        }
+
+        // 同步操作记录到会话列表
+        const sessionIdx = sessions.value.findIndex((s) => s.session_id === sessionId)
+        if (sessionIdx !== -1 && sessionData.action_log) {
+          sessions.value[sessionIdx] = {
+            ...sessions.value[sessionIdx],
+            action_log: sessionData.action_log,
+          }
+        }
+
+        // 如果会话有诊断报告但聊天记录中没有，补充诊断结果消息
+        const hasReportInHistory = messages.value.some(
+          (m) => m.role === 'assistant' && m.report
+        )
+        if (!hasReportInHistory && sessionData.latest_summary?.report) {
+          const summary = sessionData.latest_summary
           const syntheticMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
-            content: summary.report
-              ? `诊断完成：${summary.fault_type}（置信度 ${Math.round(summary.confidence * 100)}%）`
-              : '诊断完成',
+            content: `诊断完成：${summary.fault_type}（置信度 ${Math.round(summary.confidence * 100)}%）`,
             eventType: 'complete',
             timestamp: new Date().toISOString(),
             summary: {
               fault_type: summary.fault_type,
               confidence: summary.confidence,
+              line_name: sessionData.line_name,
+              voltage_level: summary.voltage_level,
             },
             report: summary.report ?? undefined,
           }
@@ -88,7 +116,6 @@ export const useSessionStore = defineStore('session', () => {
 
         if (event.event_type === 'thinking') {
           const msg = event.payload?.message ?? '思考中...'
-          assistantMsg.content = msg
           assistantMsg.thinking = msg
         } else if (event.event_type === 'result' || event.event_type === 'content') {
           assistantMsg.content += event.payload?.content ?? ''
@@ -136,6 +163,7 @@ export const useSessionStore = defineStore('session', () => {
               status: event.payload?.status ?? 'pending',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
+              action_log: [],
             })
           }
         }
@@ -153,6 +181,21 @@ export const useSessionStore = defineStore('session', () => {
 
   function clearMessages() {
     messages.value = []
+  }
+
+  async function clearAllSessions() {
+    if (!confirm('确定要清空所有诊断会话吗？此操作不可恢复。')) return
+    try {
+      error.value = null
+      const data = await clearSessions()
+      if (data.success) {
+        sessions.value = []
+        activeSessionId.value = null
+        messages.value = []
+      }
+    } catch (err) {
+      error.value = (err as Error).message
+    }
   }
 
   async function markSessionComplete() {
@@ -205,6 +248,7 @@ export const useSessionStore = defineStore('session', () => {
     selectSession,
     postMessage,
     clearMessages,
+    clearAllSessions,
     markSessionComplete,
     fetchSkillSummary,
     openReport,

@@ -38,6 +38,11 @@ function statusLabel(status: string): string {
   }
   return map[status] ?? status
 }
+
+function handleSelect(session: import('@/types').DiagnosisSession) {
+  if (session.status === 'completed') return
+  store.selectSession(session.session_id)
+}
 </script>
 
 <template>
@@ -54,8 +59,8 @@ function statusLabel(status: string): string {
         v-for="session in store.sessions"
         :key="session.session_id"
         class="session-item"
-        :class="{ active: store.activeSessionId === session.session_id }"
-        @click="store.selectSession(session.session_id)"
+        :class="{ active: store.activeSessionId === session.session_id, disabled: session.status === 'completed' }"
+        @click="handleSelect(session)"
       >
         <div class="session-row">
           <span class="line-name">{{ session.line_name }}</span>
@@ -64,13 +69,21 @@ function statusLabel(status: string): string {
           </span>
         </div>
         <div class="session-meta">
-          {{ new Date(session.updated_at).toLocaleString() }}
+          <span v-if="session.voltage_level" class="meta-tag">{{ session.voltage_level }}</span>
+          <span v-if="session.fault_time" class="meta-tag">{{ new Date(session.fault_time).toLocaleString() }}</span>
+          <span>{{ new Date(session.updated_at).toLocaleString() }}</span>
         </div>
       </li>
     </ul>
 
     <div v-if="store.sessions.length === 0" class="empty">
       暂无会话
+    </div>
+
+    <div v-if="store.sessions.length > 0" class="sidebar-footer">
+      <button class="clear-all-btn" @click="store.clearAllSessions">
+        清空所有会话
+      </button>
     </div>
   </aside>
 </template>
@@ -138,6 +151,15 @@ function statusLabel(status: string): string {
   background: #334155;
 }
 
+.session-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.session-item.disabled:hover {
+  background: transparent;
+}
+
 .session-row {
   display: flex;
   align-items: center;
@@ -203,6 +225,18 @@ function statusLabel(status: string): string {
   font-size: 0.7rem;
   color: #64748b;
   margin-top: 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+.meta-tag {
+  background: #1e293b;
+  color: #94a3b8;
+  padding: 0.05rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
 }
 
 .empty {
@@ -210,5 +244,27 @@ function statusLabel(status: string): string {
   text-align: center;
   color: #64748b;
   font-size: 0.875rem;
+}
+
+.sidebar-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid #1e293b;
+}
+
+.clear-all-btn {
+  width: 100%;
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #7f1d1d;
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.clear-all-btn:hover {
+  background: #7f1d1d;
+  color: #fff;
 }
 </style>

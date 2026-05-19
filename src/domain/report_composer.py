@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from src.core.models import TemplateConfig, ToolOutput
+from src.core.models import FaultContext, TemplateConfig, ToolOutput
 from src.infrastructure.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ class ReportComposer:
         tool_outputs: Dict[str, ToolOutput],
         template: Optional[TemplateConfig],
         session_id: str,
+        fault_context: Optional[FaultContext] = None,
     ) -> Dict[str, Any]:
         """撰写完整诊断报告。
 
@@ -56,7 +57,7 @@ class ReportComposer:
             chapters = DEFAULT_CHAPTERS.copy()
 
         # 构建提示词
-        prompt = self._build_prompt(tool_outputs, chapters)
+        prompt = self._build_prompt(tool_outputs, chapters, fault_context)
 
         # 调用 LLM
         messages = [
@@ -73,9 +74,20 @@ class ReportComposer:
         # 格式化响应
         formatted = self._format_response(response)
         summary = self._extract_summary(tool_outputs)
+        if fault_context:
+            summary["line_name"] = fault_context.line_name
+            if fault_context.additional_info:
+                summary["voltage_level"] = fault_context.additional_info.get("voltage_level", "")
+            if fault_context.fault_time:
+                summary["fault_time"] = fault_context.fault_time.isoformat()
         return {"summary": summary, "report": formatted}
 
-    def _build_prompt(self, tool_outputs: Dict[str, ToolOutput], chapters: list[str]) -> str:
+    def _build_prompt(
+        self,
+        tool_outputs: Dict[str, ToolOutput],
+        chapters: list[str],
+        fault_context: Optional[FaultContext] = None,
+    ) -> str:
         """构建 LLM 提示词。
 
         Args:
@@ -88,9 +100,29 @@ class ReportComposer:
         lines = [
             "请根据以下诊断工具输出，生成一份完整的输电线路故障诊断报告。",
             "",
+        ]
+
+        if fault_context:
+            lines.extend([
+                "## 诊断目标",
+                "",
+            ])
+            target_parts = []
+            if fault_context.additional_info:
+                voltage = fault_context.additional_info.get("voltage_level")
+                if voltage:
+                    target_parts.append(f"电压等级：{voltage}")
+            target_parts.append(f"线路名称：{fault_context.line_name}")
+            if fault_context.fault_time:
+                target_parts.append(f"故障时间：{fault_context.fault_time.strftime('%Y-%m-%d %H:%M')}")
+            target_parts.append("故障类型：跳闸")
+            lines.append(" | ".join(target_parts))
+            lines.append("")
+
+        lines.extend([
             "## 诊断工具输出",
             "",
-        ]
+        ])
 
         for tool_name, output in tool_outputs.items():
             lines.append(f"### {tool_name}")

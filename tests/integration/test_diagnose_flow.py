@@ -246,4 +246,4 @@ async def test_event_bus_receives_during_flow(app_config) -> None:
     await asyncio.sleep(0.05)
 
     assert len(received) == 1
-    assert received[0].event_type == EventType.THINKING
+    assert received[0].event_type == EventType.STATUS

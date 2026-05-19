@@ -24,7 +24,7 @@ class ActionExecutor:
     """执行 LLM 决策的 Playwright 操作。"""
 
     # 用于语义匹配的可交互元素选择器
-    INTERACTIVE_SELECTOR = "button, input, a, select, textarea, [role='button']"
+    INTERACTIVE_SELECTOR = 'button, input, a, select, textarea, [role="button"]'
 
     def __init__(self, page: Page):
         self.page = page

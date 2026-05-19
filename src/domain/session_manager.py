@@ -56,13 +56,16 @@ class SessionManager:
     # CRUD
     # ------------------------------------------------------------------
 
-    def create(self, line_name: str) -> DiagnosisSession:
+    def create(
+        self, line_name: str, fault_context: Optional[FaultContext] = None
+    ) -> DiagnosisSession:
         """创建新会话，从当前激活技能加载权重"""
         normalized = LineNormalizer.normalize(line_name)
         session = DiagnosisSession(
             session_id=f"sess_{uuid.uuid4().hex[:8]}",
             line_name=normalized,
             status=SessionStatus.PENDING,
+            fault_context=fault_context,
         )
         session.active_skill_name = self._default_skill_name
 
@@ -147,7 +150,7 @@ class SessionManager:
             return sess
 
         # 创建新会话
-        return self.create(line_name)
+        return self.create(line_name, fault_context=fault_context)
     def set_default_skill(self, name: str) -> None:
         """设置全局默认技能"""
         self._default_skill_name = name

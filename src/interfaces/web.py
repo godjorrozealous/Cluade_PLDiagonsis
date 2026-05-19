@@ -220,7 +220,13 @@ def create_app() -> Flask:
         for s in sessions:
             voltage_level = ""
             fault_time = ""
-            if s.current_summary and s.current_summary.fault_context:
+            # 优先从会话的 fault_context 获取（创建时保存）
+            if s.fault_context:
+                voltage_level = s.fault_context.additional_info.get("voltage_level", "") or ""
+                if s.fault_context.fault_time:
+                    fault_time = s.fault_context.fault_time.isoformat()
+            # 回退到 current_summary.fault_context（诊断完成后保存）
+            elif s.current_summary and s.current_summary.fault_context:
                 voltage_level = (
                     s.current_summary.fault_context.additional_info.get("voltage_level", "")
                     or ""
@@ -236,6 +242,16 @@ def create_app() -> Flask:
                     "fault_time": fault_time,
                     "created_at": s.created_at.isoformat(),
                     "updated_at": s.updated_at.isoformat(),
+                    "action_log": [
+                        {
+                            "action_type": a.action_type,
+                            "tool_name": a.parameters.get("tool_name", ""),
+                            "description": a.parameters.get("description", ""),
+                            "weight": a.parameters.get("weight"),
+                            "timestamp": a.timestamp.isoformat(),
+                        }
+                        for a in s.action_log
+                    ],
                 }
             )
         return jsonify({"sessions": result})

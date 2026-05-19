@@ -47,6 +47,31 @@ function handleViewReport(msg: ChatMessage) {
 function handleCompleteDiagnosis() {
   store.markSessionComplete()
 }
+
+function handleClearMessages() {
+  if (confirm('确定要清除当前对话的所有消息吗？')) {
+    store.clearMessages()
+  }
+}
+
+function formatActionLabel(action: { action_type: string; tool_name: string; description: string; weight?: number }): string {
+  switch (action.action_type) {
+    case 'exclude':
+      return `排除${action.tool_name}`
+    case 'include':
+      return `恢复${action.tool_name}`
+    case 'recheck':
+      return `复查${action.tool_name}`
+    case 'adjust_weight':
+      return `调整权重：${action.tool_name} ${action.weight ?? ''}`
+    case 'modify_report':
+      return `修改报告：${action.description || action.tool_name}`
+    case 'complete':
+      return '完成诊断'
+    default:
+      return `${action.action_type}${action.tool_name ? ': ' + action.tool_name : ''}`
+  }
+}
 </script>
 
 <template>
@@ -81,6 +106,18 @@ function handleCompleteDiagnosis() {
           <div v-else-if="msg.role === 'assistant' && msg.summary" class="summary-card">
             <div class="summary-header">诊断完成</div>
             <div class="summary-body">
+              <div v-if="msg.summary.voltage_level" class="summary-row">
+                <span class="summary-label">电压等级</span>
+                <span class="summary-value">{{ msg.summary.voltage_level }}</span>
+              </div>
+              <div v-if="msg.summary.line_name" class="summary-row">
+                <span class="summary-label">线路名称</span>
+                <span class="summary-value">{{ msg.summary.line_name }}</span>
+              </div>
+              <div v-if="msg.summary.fault_time" class="summary-row">
+                <span class="summary-label">故障时间</span>
+                <span class="summary-value">{{ msg.summary.fault_time }}</span>
+              </div>
               <div class="summary-row">
                 <span class="summary-label">故障类型</span>
                 <span class="summary-value">{{ msg.summary.fault_type }}</span>
@@ -88,6 +125,18 @@ function handleCompleteDiagnosis() {
               <div class="summary-row">
                 <span class="summary-label">置信度</span>
                 <span class="summary-value">{{ Math.round(msg.summary.confidence * 100) }}%</span>
+              </div>
+            </div>
+            <div v-if="store.activeSession?.action_log?.length" class="action-log">
+              <div class="action-log-label">操作记录</div>
+              <div class="action-log-items">
+                <span
+                  v-for="(action, idx) in store.activeSession.action_log"
+                  :key="idx"
+                  class="action-tag"
+                >
+                  {{ formatActionLabel(action) }}
+                </span>
               </div>
             </div>
             <div class="summary-actions">
@@ -107,7 +156,12 @@ function handleCompleteDiagnosis() {
 
           <!-- Regular assistant message -->
           <div v-else-if="msg.role === 'assistant'">
+            <div v-if="!msg.content && store.isLoading" class="thinking">
+              <span class="spinner"></span>
+              <span>诊断中...</span>
+            </div>
             <div
+              v-if="msg.content"
               class="markdown-body"
               v-html="renderMarkdown(msg.content)"
             ></div>
@@ -122,9 +176,18 @@ function handleCompleteDiagnosis() {
       </div>
 
       <div v-if="store.messages.length === 0" class="welcome">
-        <h1>输电线路故障诊断智能体</h1>
+        <h1>输电线路故障综合诊断智能体</h1>
         <p>请输入线路信息开始诊断</p>
       </div>
+    </div>
+
+    <div v-if="store.messages.length > 0" class="chat-toolbar">
+      <span class="msg-count">
+        {{ store.messages.filter(m => m.role === 'user').length }} 轮对话
+      </span>
+      <button class="clear-btn" @click="handleClearMessages">
+        清除对话
+      </button>
     </div>
 
     <div class="input-area">
@@ -313,6 +376,36 @@ function handleCompleteDiagnosis() {
   margin-bottom: 0.5rem;
 }
 
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 2rem;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 0.8125rem;
+}
+
+.msg-count {
+  color: #64748b;
+}
+
+.clear-btn {
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #fecaca;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.clear-btn:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
 .input-area {
   display: flex;
   gap: 0.75rem;
@@ -417,6 +510,34 @@ function handleCompleteDiagnosis() {
 .summary-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.action-log {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #86efac;
+}
+
+.action-log-label {
+  font-size: 0.75rem;
+  color: #166534;
+  margin-bottom: 0.375rem;
+}
+
+.action-log-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.action-tag {
+  display: inline-block;
+  background: #fff;
+  color: #14532d;
+  border: 1px solid #86efac;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 .view-report-btn {

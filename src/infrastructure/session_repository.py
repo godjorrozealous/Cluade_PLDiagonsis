@@ -14,7 +14,8 @@ from src.core.models import DiagnosisSession
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DATA_DIR = Path(os.getenv("PLDIAGNOSIS_DATA_DIR", "data"))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_DATA_DIR = Path(os.getenv("PLDIAGNOSIS_DATA_DIR", PROJECT_ROOT / "data"))
 DEFAULT_DATA_FILE = DEFAULT_DATA_DIR / "sessions.json"
 
 

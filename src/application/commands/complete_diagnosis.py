@@ -38,6 +38,10 @@ class CompleteDiagnosisCommand(Command):
             )
 
         self.session_manager.transition(session.session_id, SessionStatus.COMPLETED)
+        yield Event.status(
+            session.session_id,
+            {"status": SessionStatus.COMPLETED.value},
+        )
 
         logger.info(f"诊断完成: {session.session_id}")
 

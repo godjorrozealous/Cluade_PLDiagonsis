@@ -205,6 +205,7 @@ class DiagnosisSession(BaseModel):
 
     summaries: List[DiagnosisSummary] = Field(default_factory=list)
     current_summary: Optional[DiagnosisSummary] = None
+    fault_context: Optional[FaultContext] = None
     action_log: List[UserAction] = Field(default_factory=list)
     latest_report: Optional[str] = None
     custom_strategy_name: Optional[str] = None
