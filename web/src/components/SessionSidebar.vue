@@ -4,6 +4,14 @@ import { onMounted } from 'vue'
 
 const store = useSessionStore()
 
+const props = defineProps<{
+  currentView: 'chat' | 'reports'
+}>()
+
+const emit = defineEmits<{
+  (e: 'switchView', view: 'chat' | 'reports'): void
+}>()
+
 onMounted(() => {
   store.loadSessions()
 })
@@ -70,14 +78,31 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
         </div>
         <div class="session-meta">
           <span v-if="session.voltage_level" class="meta-tag">{{ session.voltage_level }}</span>
-          <span v-if="session.fault_time" class="meta-tag">{{ new Date(session.fault_time).toLocaleString() }}</span>
-          <span>{{ new Date(session.updated_at).toLocaleString() }}</span>
+          <span v-if="session.fault_time" class="meta-tag fault-time">{{ new Date(session.fault_time).toLocaleString() }}</span>
+          <span v-else class="meta-tag">{{ new Date(session.created_at).toLocaleString() }}</span>
         </div>
       </li>
     </ul>
 
     <div v-if="store.sessions.length === 0" class="empty">
       暂无会话
+    </div>
+
+    <div class="nav-links">
+      <button
+        class="nav-link"
+        :class="{ active: props.currentView === 'chat' }"
+        @click="emit('switchView', 'chat')"
+      >
+        诊断会话
+      </button>
+      <button
+        class="nav-link"
+        :class="{ active: props.currentView === 'reports' }"
+        @click="emit('switchView', 'reports')"
+      >
+        报告历史
+      </button>
     </div>
 
     <div v-if="store.sessions.length > 0" class="sidebar-footer">
@@ -239,6 +264,11 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
   font-size: 0.65rem;
 }
 
+.meta-tag.fault-time {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+
 .empty {
   padding: 2rem;
   text-align: center;
@@ -266,5 +296,36 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
 .clear-all-btn:hover {
   background: #7f1d1d;
   color: #fff;
+}
+
+.nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid #1e293b;
+}
+
+.nav-link {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.nav-link:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.nav-link.active {
+  background: #334155;
+  color: #e2e8f0;
+  border-color: #475569;
 }
 </style>

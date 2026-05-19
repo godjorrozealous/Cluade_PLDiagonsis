@@ -5,6 +5,12 @@ export interface DiagnosisSummary {
   line_name?: string
   voltage_level?: string
   fault_time?: string
+  action_log?: Array<{
+    action_type: string
+    tool_name: string
+    description: string
+    weight?: number
+  }>
 }
 
 export interface UserAction {

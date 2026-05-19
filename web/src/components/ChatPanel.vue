@@ -2,17 +2,30 @@
 import { ref, nextTick, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { renderMarkdown } from '@/utils/markdown'
-import type { ChatMessage } from '@/types'
+import { createSkill } from '@/api/http'
 
 const store = useSessionStore()
 const input = ref('')
 const listRef = ref<HTMLDivElement | null>(null)
+const reportExpanded = ref<Record<string, boolean>>({})
+const showCompletionReview = ref(false)
+const reviewSessionId = ref<string | null>(null)
 
 async function scrollToBottom() {
   await nextTick()
   if (listRef.value) {
     listRef.value.scrollTop = listRef.value.scrollHeight
   }
+}
+
+function toggleReport(msgId: string) {
+  reportExpanded.value[msgId] = !reportExpanded.value[msgId]
+}
+
+function getActionLogForReview(): Array<{ action_type: string; tool_name: string; description: string; weight?: number }> {
+  const session = store.activeSession
+  if (!session) return []
+  return session.action_log ?? []
 }
 
 watch(() => store.messages.length, scrollToBottom)
@@ -38,14 +51,33 @@ function bubbleClass(role: string, eventType?: string): string {
   return 'bubble-assistant'
 }
 
-function handleViewReport(msg: ChatMessage) {
-  if (msg.report) {
-    store.openReport(msg.report)
+function handleCompleteDiagnosis() {
+  const sessionId = store.activeSessionId
+  if (!sessionId) return
+  reviewSessionId.value = sessionId
+  showCompletionReview.value = true
+}
+
+async function handleSaveSkillFromReview() {
+  const sessionId = reviewSessionId.value
+  if (!sessionId) return
+  try {
+    const data = await store.fetchSkillSummary(sessionId)
+    const name = prompt('技能名称:', data.suggested_name)
+    if (name) {
+      await createSkill(name, data.content)
+      window.dispatchEvent(new CustomEvent('skill-saved'))
+      showCompletionReview.value = false
+      await store.markSessionComplete()
+    }
+  } catch (err) {
+    alert(`保存技能失败: ${(err as Error).message}`)
   }
 }
 
-function handleCompleteDiagnosis() {
-  store.markSessionComplete()
+async function handleSkipSave() {
+  showCompletionReview.value = false
+  await store.markSessionComplete()
 }
 
 function handleClearMessages() {
@@ -127,11 +159,11 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
                 <span class="summary-value">{{ Math.round(msg.summary.confidence * 100) }}%</span>
               </div>
             </div>
-            <div v-if="store.activeSession?.action_log?.length" class="action-log">
+            <div v-if="msg.summary?.action_log?.length || store.activeSession?.action_log?.length" class="action-log">
               <div class="action-log-label">操作记录</div>
               <div class="action-log-items">
                 <span
-                  v-for="(action, idx) in store.activeSession.action_log"
+                  v-for="(action, idx) in (msg.summary?.action_log ?? store.activeSession?.action_log ?? [])"
                   :key="idx"
                   class="action-tag"
                 >
@@ -139,10 +171,13 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
                 </span>
               </div>
             </div>
-            <div class="summary-actions">
-              <button v-if="msg.report" class="view-report-btn" @click="handleViewReport(msg)">
-                查看报告
+            <div v-if="msg.report" class="report-section">
+              <button class="view-report-btn" @click="toggleReport(msg.id)">
+                {{ reportExpanded[msg.id] ? '收起报告' : '查看报告' }}
               </button>
+              <div v-if="reportExpanded[msg.id]" class="report-content markdown-body" v-html="renderMarkdown(msg.report)"></div>
+            </div>
+            <div class="summary-actions">
               <button
                 v-if="store.activeSession?.status === 'modifying' || store.activeSession?.status === 'excluded'"
                 class="complete-btn"
@@ -178,6 +213,33 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
       <div v-if="store.messages.length === 0" class="welcome">
         <h1>输电线路故障综合诊断智能体</h1>
         <p>请输入线路信息开始诊断</p>
+      </div>
+
+      <!-- Completion review panel -->
+      <div v-if="showCompletionReview" class="completion-review">
+        <div class="review-header">诊断完成 — 操作回顾</div>
+        <div class="review-body">
+          <div v-if="getActionLogForReview().length > 0" class="review-actions-list">
+            <div class="review-label">本次诊断中您执行了以下操作：</div>
+            <div class="review-tags">
+              <span
+                v-for="(action, idx) in getActionLogForReview()"
+                :key="idx"
+                class="review-tag"
+              >
+                {{ formatActionLabel(action) }}
+              </span>
+            </div>
+          </div>
+          <div v-else class="review-no-actions">
+            本次诊断未进行修改操作。
+          </div>
+          <div class="review-prompt">是否将该诊断策略保存为新技能？</div>
+          <div class="review-buttons">
+            <button class="save-skill-btn" @click="handleSaveSkillFromReview">保存技能</button>
+            <button class="skip-save-btn" @click="handleSkipSave">不保存</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -576,6 +638,125 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 .complete-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Completion review panel */
+.completion-review {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-top: 1rem;
+  max-width: 480px;
+  align-self: flex-start;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.review-header {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #0f172a;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.review-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.review-label {
+  font-size: 0.875rem;
+  color: #475569;
+  margin-bottom: 0.375rem;
+}
+
+.review-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.review-tag {
+  display: inline-block;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.review-no-actions {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.review-prompt {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #0f172a;
+  margin-top: 0.5rem;
+}
+
+.review-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.save-skill-btn {
+  background: #0f172a;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.save-skill-btn:hover {
+  opacity: 0.9;
+}
+
+.skip-save-btn {
+  background: #fff;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.skip-save-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* Report section in summary card */
+.report-section {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #86efac;
+}
+
+.report-content {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
 }
 </style>
 

@@ -44,10 +44,26 @@ export function getTools() {
 export interface SkillInfo {
   name: string
   description: string
+  is_default: boolean
+  source: string
 }
 
 export function getSkills() {
   return request<{ skills: SkillInfo[] }>('/api/skills')
+}
+
+export interface ReportItem {
+  session_id: string
+  line_name: string
+  fault_type: string
+  confidence: number
+  fault_time: string
+  created_at: string
+  report: string
+}
+
+export function getReports() {
+  return request<{ reports: ReportItem[] }>('/api/reports')
 }
 
 export function getDefaultSkill() {

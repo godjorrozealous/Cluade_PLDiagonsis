@@ -49,19 +49,24 @@ class MCPToolAdapter(ToolAdapter):
     async def execute(self, context: FaultContext) -> ToolOutput:
         """调用 MCP 服务"""
         client = await self._get_client()
-        fault_time = getattr(context, "fault_time", None)
+
+        # 支持 DiagnosisContext（嵌套 fault_context）和直接的 FaultContext
+        fault_ctx = getattr(context, "fault_context", None) or context
+        fault_time = getattr(fault_ctx, "fault_time", None)
+        additional_info = getattr(fault_ctx, "additional_info", {}) or {}
+
         payload = {
-            "line_name": context.line_name,
-            "voltage_level": None,
+            "line_name": getattr(fault_ctx, "line_name", getattr(context, "line_name", "")),
+            "voltage_level": additional_info.get("voltage_level") if isinstance(additional_info, dict) else None,
             "fault_time": fault_time.isoformat() if fault_time else None,
             "additional_info": {
-                "line_id": getattr(context, "line_id", None),
-                "tower_id": getattr(context, "tower_id", None),
-                "weather_info": getattr(context, "weather_info", None),
-                "scada_data": getattr(context, "scada_data", None),
-                "wave_data": getattr(context, "wave_data", None),
-                "images": getattr(context, "images", None),
-                **getattr(context, "additional_info", {}),
+                "line_id": getattr(fault_ctx, "line_id", None),
+                "tower_id": getattr(fault_ctx, "tower_id", None),
+                "weather_info": getattr(fault_ctx, "weather_info", None),
+                "scada_data": getattr(fault_ctx, "scada_data", None),
+                "wave_data": getattr(fault_ctx, "wave_data", None),
+                "images": getattr(fault_ctx, "images", None),
+                **(additional_info if isinstance(additional_info, dict) else {}),
             },
         }
 

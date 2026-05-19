@@ -1,20 +1,27 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import SessionSidebar from '@/components/SessionSidebar.vue'
 import ChatPanel from '@/components/ChatPanel.vue'
 import ToolList from '@/components/ToolList.vue'
-import ReportPreview from '@/components/ReportPreview.vue'
 import StrategyManager from '@/components/StrategyManager.vue'
-import ReportModal from '@/components/ReportModal.vue'
+import ReportHistory from '@/components/ReportHistory.vue'
+
+const currentView = ref<'chat' | 'reports'>('chat')
+
+function switchView(view: 'chat' | 'reports') {
+  currentView.value = view
+}
 </script>
 
 <template>
   <div class="app-layout">
-    <SessionSidebar />
-    <ChatPanel />
-    <ToolList />
-    <ReportPreview />
-    <StrategyManager />
-    <ReportModal />
+    <SessionSidebar :current-view="currentView" @switch-view="switchView" />
+    <template v-if="currentView === 'chat'">
+      <ChatPanel />
+      <ToolList />
+      <StrategyManager />
+    </template>
+    <ReportHistory v-else />
   </div>
 </template>
 

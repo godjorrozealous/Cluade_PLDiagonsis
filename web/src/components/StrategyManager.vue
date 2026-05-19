@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { getSkills, deleteSkill, resetSkills, getDefaultSkill, setDefaultSkill } from '@/api/http'
 import type { SkillInfo } from '@/api/http'
 
@@ -25,6 +25,10 @@ async function loadSkills() {
   }
 }
 
+function onSkillSaved() {
+  loadSkills()
+}
+
 async function handleActivate(name: string) {
   try {
     error.value = null
@@ -35,12 +39,16 @@ async function handleActivate(name: string) {
   }
 }
 
-async function handleDelete(name: string) {
-  if (!confirm(`确定删除技能 "${name}" 吗？`)) return
+async function handleDelete(skill: SkillInfo) {
+  if (skill.is_default) {
+    alert('默认技能不可删除')
+    return
+  }
+  if (!confirm(`确定删除技能 "${skill.name}" 吗？`)) return
   try {
     error.value = null
-    await deleteSkill(name)
-    if (defaultSkill.value === name) defaultSkill.value = 'comprehensive_diagnosis'
+    await deleteSkill(skill.name)
+    if (defaultSkill.value === skill.name) defaultSkill.value = 'comprehensive_diagnosis'
     await loadSkills()
   } catch (err) {
     error.value = (err as Error).message
@@ -59,6 +67,11 @@ async function handleReset() {
 
 onMounted(() => {
   loadSkills()
+  window.addEventListener('skill-saved', onSkillSaved)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('skill-saved', onSkillSaved)
 })
 </script>
 
@@ -80,7 +93,10 @@ onMounted(() => {
         :class="{ active: defaultSkill === s.name }"
       >
         <div class="skill-info">
-          <div class="skill-name">{{ s.name }}</div>
+          <div class="skill-name">
+            {{ s.name }}
+            <span class="source-tag" :class="{ 'source-default': s.is_default }">{{ s.source }}</span>
+          </div>
           <div class="skill-desc">{{ s.description || '无描述' }}</div>
         </div>
         <div class="skill-actions">
@@ -91,7 +107,12 @@ onMounted(() => {
           >
             {{ defaultSkill === s.name ? '已激活' : '激活' }}
           </button>
-          <button class="delete-btn" @click="handleDelete(s.name)" title="删除">&times;</button>
+          <button
+            v-if="!s.is_default"
+            class="delete-btn"
+            @click="handleDelete(s)"
+            title="删除"
+          >&times;</button>
         </div>
       </li>
     </ul>
@@ -178,6 +199,23 @@ onMounted(() => {
   font-weight: 500;
   font-size: 0.875rem;
   color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.source-tag {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.1rem 0.375rem;
+  border-radius: 0.25rem;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.source-tag.source-default {
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .skill-desc {

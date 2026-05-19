@@ -139,6 +139,10 @@ class DiagnoseCommand(Command):
         diagnosis_ctx = DiagnosisContext(
             session_id=session.session_id,
             line_name=session.line_name,
+            weights=session.active_weights.copy(),
+            excluded_tools=session.excluded_tools.copy(),
+            rechecked_tools=session.rechecked_tools.copy(),
+            fault_context=fault_context,
         )
 
         planned_tools = plan.get("tools_to_call", [])
@@ -183,8 +187,18 @@ class DiagnoseCommand(Command):
 
         # 9. 生成诊断报告
         yield Event.thinking(session.session_id, "生成诊断报告...")
+        action_log_data = [
+            {
+                "action_type": a.action_type,
+                "tool_name": a.parameters.get("tool_name", ""),
+                "description": a.parameters.get("description", ""),
+                "weight": a.parameters.get("weight"),
+            }
+            for a in session.action_log
+        ]
         composed = await self.report_composer.compose(
-            tool_outputs, None, session.session_id, fault_context
+            tool_outputs, None, session.session_id, fault_context, action_log_data,
+            weights=session.active_weights,
         )
         report = composed["report"]
         summary = composed["summary"]
@@ -223,15 +237,28 @@ class DiagnoseCommand(Command):
                 "report": report,
                 "message": f"诊断完成：{summary['fault_type']}（置信度 {int(summary['confidence'] * 100)}%）",
                 "thinking": thinking_text,
+                "action_log": action_log_data,
+                "status": SessionStatus.MODIFYING.value,
             },
         )
 
     def _parse_fault_context(
         self, message: str, session: DiagnosisSession
     ) -> FaultContext:
-        """解析故障上下文"""
+        """解析故障上下文。
+
+        优先从用户消息中提取，若缺失关键字段则回退到会话已保存的 fault_context。
+        """
         from src.infrastructure.fault_parser import FaultContextParser
 
         fault_ctx = FaultContextParser.parse(message, session.line_name)
         fault_ctx.line_id = session.session_id
+
+        # 若用户消息未提供故障时间/电压等级，回退到会话原始 fault_context
+        if session.fault_context:
+            if not fault_ctx.fault_time and session.fault_context.fault_time:
+                fault_ctx.fault_time = session.fault_context.fault_time
+            if not fault_ctx.additional_info.get("voltage_level") and session.fault_context.additional_info.get("voltage_level"):
+                fault_ctx.additional_info["voltage_level"] = session.fault_context.additional_info["voltage_level"]
+
         return fault_ctx

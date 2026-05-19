@@ -10,8 +10,6 @@ export const useSessionStore = defineStore('session', () => {
   const messages = ref<ChatMessage[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
-  const reportModalVisible = ref(false)
-  const currentReport = ref<string>('')
 
   const activeSession = computed(() =>
     sessions.value.find((s) => s.session_id === activeSessionId.value) ?? null
@@ -142,6 +140,35 @@ export const useSessionStore = defineStore('session', () => {
           if (event.payload?.report) {
             assistantMsg.report = event.payload.report as string
           }
+          // 同步操作记录到会话列表
+          const actions = event.payload?.summary?.action_log ?? event.payload?.action_log
+          if (actions && event.session_id) {
+            const idx = sessions.value.findIndex(
+              (s) => s.session_id === event.session_id
+            )
+            if (idx !== -1) {
+              sessions.value[idx] = {
+                ...sessions.value[idx],
+                action_log: actions.map((a: any) => ({
+                  action_type: a.action_type,
+                  tool_name: a.tool_name,
+                  description: a.description,
+                  weight: a.weight,
+                  timestamp: new Date().toISOString(),
+                })),
+              }
+            }
+          }
+          // 确保诊断完成后会话状态为 modifying（兼容首次诊断场景）
+          const completedStatus = event.payload?.status
+          if (completedStatus && event.session_id) {
+            const idx = sessions.value.findIndex(
+              (s) => s.session_id === event.session_id
+            )
+            if (idx !== -1) {
+              sessions.value[idx] = { ...sessions.value[idx], status: completedStatus }
+            }
+          }
         } else if (event.event_type === 'error') {
           assistantMsg.content = `错误: ${event.payload?.message ?? '未知错误'}`
           error.value = assistantMsg.content
@@ -164,6 +191,8 @@ export const useSessionStore = defineStore('session', () => {
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
               action_log: [],
+              fault_time: event.payload?.fault_time,
+              voltage_level: event.payload?.voltage_level,
             })
           }
         }
@@ -225,16 +254,6 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  function openReport(report: string) {
-    currentReport.value = report
-    reportModalVisible.value = true
-  }
-
-  function closeReport() {
-    reportModalVisible.value = false
-    currentReport.value = ''
-  }
-
   return {
     sessions,
     activeSessionId,
@@ -242,8 +261,6 @@ export const useSessionStore = defineStore('session', () => {
     messages,
     isLoading,
     error,
-    reportModalVisible,
-    currentReport,
     loadSessions,
     selectSession,
     postMessage,
@@ -251,7 +268,5 @@ export const useSessionStore = defineStore('session', () => {
     clearAllSessions,
     markSessionComplete,
     fetchSkillSummary,
-    openReport,
-    closeReport,
   }
 })

@@ -35,6 +35,8 @@ class ReportComposer:
         template: Optional[TemplateConfig],
         session_id: str,
         fault_context: Optional[FaultContext] = None,
+        action_log: Optional[list[dict]] = None,
+        weights: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         """撰写完整诊断报告。
 
@@ -44,6 +46,7 @@ class ReportComposer:
             tool_outputs: 各诊断工具的输出结果，键为工具名，值为 ToolOutput。
             template: 报告模板配置，若为 None 则使用默认章节。
             session_id: 当前会话 ID，用于日志追踪。
+            weights: 工具权重配置，用于加权计算诊断摘要。
 
         Returns:
             包含 summary 和 report 的字典。
@@ -57,7 +60,7 @@ class ReportComposer:
             chapters = DEFAULT_CHAPTERS.copy()
 
         # 构建提示词
-        prompt = self._build_prompt(tool_outputs, chapters, fault_context)
+        prompt = self._build_prompt(tool_outputs, chapters, fault_context, action_log)
 
         # 调用 LLM
         messages = [
@@ -73,13 +76,15 @@ class ReportComposer:
 
         # 格式化响应
         formatted = self._format_response(response)
-        summary = self._extract_summary(tool_outputs)
+        summary = self._extract_summary(tool_outputs, weights)
         if fault_context:
             summary["line_name"] = fault_context.line_name
             if fault_context.additional_info:
                 summary["voltage_level"] = fault_context.additional_info.get("voltage_level", "")
             if fault_context.fault_time:
                 summary["fault_time"] = fault_context.fault_time.isoformat()
+        if action_log:
+            summary["action_log"] = action_log
         return {"summary": summary, "report": formatted}
 
     def _build_prompt(
@@ -87,6 +92,7 @@ class ReportComposer:
         tool_outputs: Dict[str, ToolOutput],
         chapters: list[str],
         fault_context: Optional[FaultContext] = None,
+        action_log: Optional[list[dict]] = None,
     ) -> str:
         """构建 LLM 提示词。
 
@@ -117,6 +123,34 @@ class ReportComposer:
                 target_parts.append(f"故障时间：{fault_context.fault_time.strftime('%Y-%m-%d %H:%M')}")
             target_parts.append("故障类型：跳闸")
             lines.append(" | ".join(target_parts))
+            lines.append("")
+
+        if action_log:
+            lines.extend([
+                "## 用户操作历史",
+                "",
+                "本次诊断过程中用户执行了以下操作：",
+                "",
+            ])
+            for action in action_log:
+                action_type = action.get("action_type", "")
+                tool_name = action.get("tool_name", "")
+                desc = action.get("description", "")
+                if action_type == "exclude":
+                    lines.append(f"- 排除 {tool_name} 诊断数据")
+                elif action_type == "include":
+                    lines.append(f"- 恢复 {tool_name} 诊断数据")
+                elif action_type == "recheck":
+                    lines.append(f"- 复查 {tool_name}")
+                elif action_type == "adjust_weight":
+                    weight = action.get("weight", "")
+                    lines.append(f"- 调整 {tool_name} 权重为 {weight}")
+                elif action_type == "modify_report":
+                    lines.append(f"- 修改报告：{desc or tool_name}")
+                elif action_type == "complete":
+                    lines.append("- 完成诊断")
+                else:
+                    lines.append(f"- {action_type}: {desc or tool_name}")
             lines.append("")
 
         lines.extend([
@@ -171,26 +205,37 @@ class ReportComposer:
             return f"# 输电线路故障诊断报告\n\n{stripped}"
         return stripped
 
-    def _extract_summary(self, tool_outputs: Dict[str, ToolOutput]) -> Dict[str, Any]:
+    def _extract_summary(
+        self, tool_outputs: Dict[str, ToolOutput], weights: Optional[Dict[str, float]] = None
+    ) -> Dict[str, Any]:
         """从工具输出中提取诊断摘要。
 
         取置信度最高的工具结果作为 primary diagnosis。
+        若提供了 weights，则使用加权后的置信度进行比较。
         """
         best_tool = None
-        best_confidence = 0.0
+        best_weighted_confidence = 0.0
+        best_raw_confidence = 0.0
         best_fault_type = "未知"
 
         for tool_name, output in tool_outputs.items():
             structured = output.structured_data or {}
             confidence = structured.get("confidence", 0.0)
             fault_type = structured.get("fault_type", "未知")
-            if isinstance(confidence, (int, float)) and confidence > best_confidence:
-                best_confidence = confidence
+            if not isinstance(confidence, (int, float)):
+                continue
+
+            weight = weights.get(tool_name, 1.0) if weights else 1.0
+            weighted_confidence = confidence * weight
+
+            if weighted_confidence > best_weighted_confidence:
+                best_weighted_confidence = weighted_confidence
+                best_raw_confidence = confidence
                 best_fault_type = fault_type
                 best_tool = tool_name
 
         return {
             "fault_type": best_fault_type,
-            "confidence": round(best_confidence, 2),
+            "confidence": round(best_raw_confidence, 2),
             "primary_tool": best_tool or "unknown",
         }

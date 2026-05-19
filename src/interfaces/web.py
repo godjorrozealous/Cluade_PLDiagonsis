@@ -126,10 +126,20 @@ def create_app() -> Flask:
             # 保存用户消息
             _append_chat_message(session, "user", message)
 
+            start_payload: dict[str, Any] = {
+                "message": "开始诊断...",
+                "line_name": session.line_name,
+            }
+            if session.fault_context:
+                if session.fault_context.fault_time:
+                    start_payload["fault_time"] = session.fault_context.fault_time.isoformat()
+                voltage = session.fault_context.additional_info.get("voltage_level")
+                if voltage:
+                    start_payload["voltage_level"] = voltage
             yield _sse_event(
                 Event.start(
                     session.session_id,
-                    {"message": "开始诊断...", "line_name": session.line_name},
+                    start_payload,
                 )
             )
             yield _sse_event(Event.thinking(session.session_id, "理解用户意图..."))
@@ -153,8 +163,8 @@ def create_app() -> Flask:
                             event.event_type.value,
                         )
 
-                # 自动链式诊断：排除/恢复工具后无条件自动重新诊断
-                if intent_type in (IntentType.EXCLUDE_TOOL, IntentType.INCLUDE_TOOL):
+                # 自动链式诊断：排除/恢复/调整权重后无条件自动重新诊断
+                if intent_type in (IntentType.EXCLUDE_TOOL, IntentType.INCLUDE_TOOL, IntentType.ADJUST_WEIGHT):
                     yield _sse_event(
                         Event.thinking(session.session_id, "自动重新诊断...")
                     )
@@ -290,6 +300,38 @@ def create_app() -> Flask:
         except Exception as e:
             logger.error(f"完成诊断失败: {e}")
             return jsonify({"error": str(e)}), 400
+
+    @app.route("/api/reports", methods=["GET"])
+    def list_reports():
+        """获取所有诊断报告列表"""
+        sessions = container.session_manager.list_sessions()
+        reports = []
+        for s in sessions:
+            if not s.latest_report:
+                continue
+            fault_type = "未知"
+            confidence = 0.0
+            if s.current_summary and s.current_summary.primary_diagnosis:
+                fault_type = s.current_summary.primary_diagnosis.fault_type
+                confidence = s.current_summary.primary_diagnosis.confidence
+            reports.append(
+                {
+                    "session_id": s.session_id,
+                    "line_name": s.line_name,
+                    "fault_type": fault_type,
+                    "confidence": confidence,
+                    "fault_time": (
+                        s.fault_context.fault_time.isoformat()
+                        if s.fault_context and s.fault_context.fault_time
+                        else ""
+                    ),
+                    "created_at": s.created_at.isoformat(),
+                    "report": s.latest_report,
+                }
+            )
+        # 按创建时间倒序排列
+        reports.sort(key=lambda r: r["created_at"], reverse=True)
+        return jsonify({"reports": reports})
 
     @app.route("/api/tools", methods=["GET"])
     def list_tools():
@@ -442,6 +484,8 @@ def create_app() -> Flask:
     # ------------------------------------------------------------------
     # 技能管理 API（Markdown 格式）
     # ------------------------------------------------------------------
+    DEFAULT_SKILL_NAME = "comprehensive_diagnosis"
+
     @app.route("/api/skills", methods=["GET"])
     def list_skills():
         """获取所有技能文件"""
@@ -460,6 +504,8 @@ def create_app() -> Flask:
                     {
                         "name": name,
                         "description": description,
+                        "is_default": name == DEFAULT_SKILL_NAME,
+                        "source": "系统" if name == DEFAULT_SKILL_NAME else "用户自定义",
                     }
                 )
             except Exception as e:
@@ -517,10 +563,11 @@ def create_app() -> Flask:
 
     @app.route("/api/skills/<name>", methods=["DELETE"])
     def delete_skill(name: str):
-        """删除技能"""
+        """删除技能（默认技能不可删除）"""
+        if name == DEFAULT_SKILL_NAME:
+            return jsonify({"error": f"默认技能 '{name}' 不可删除"}), 403
         if not container.skill_loader.delete(name):
             return jsonify({"error": f"技能 '{name}' 不存在"}), 404
-
         return jsonify({"success": True, "message": f"技能 '{name}' 已删除"})
 
     @app.route("/api/skills/discover", methods=["POST"])
