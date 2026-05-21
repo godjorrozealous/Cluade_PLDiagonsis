@@ -58,6 +58,18 @@ class TestExtractFaultTime:
     def test_returns_none_when_no_time(self):
         assert FaultContextParser._extract_fault_time("没有时间的消息") is None
 
+    def test_parse_time_with_milliseconds(self):
+        dt = FaultContextParser._extract_fault_time("2026-05-12 08:00:05.013")
+        assert dt == datetime(2026, 5, 12, 8, 0, 5, 13000)
+
+    def test_parse_time_without_milliseconds(self):
+        dt = FaultContextParser._extract_fault_time("2026-05-12 08:00:05")
+        assert dt == datetime(2026, 5, 12, 8, 0, 5, 0)
+
+    def test_parse_time_minute_only(self):
+        dt = FaultContextParser._extract_fault_time("2026-05-12 08:00")
+        assert dt == datetime(2026, 5, 12, 8, 0, 0, 0)
+
 
 class TestExtractWeather:
     def test_extracts_condition(self):
