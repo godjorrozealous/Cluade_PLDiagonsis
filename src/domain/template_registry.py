@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 UPLOADS_DIR = Path("templates/uploads")
 PARSED_DIR = Path("templates/parsed")
-DEFAULT_TEMPLATE = Path("templates/default.md")
 
 PARSERS = [
     MarkdownTemplateParser(),
@@ -42,6 +41,8 @@ class TemplateRegistry:
 
     def list_templates(self) -> List[dict]:
         """列出所有模板（含解析状态）。"""
+        if not UPLOADS_DIR.exists():
+            return []
         templates = []
         for p in sorted(UPLOADS_DIR.iterdir()):
             if not p.is_file():
@@ -104,6 +105,8 @@ class TemplateRegistry:
                 if parsed:
                     parsed_file = PARSED_DIR / f"{parsed.name}.md"
                     parsed_file.write_text(parsed.content, encoding="utf-8")
+                else:
+                    return False
             else:
                 return False
 
