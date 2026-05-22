@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { getReports } from '@/api/http'
 import { renderMarkdown } from '@/utils/markdown'
+import { formatTime } from '@/utils/time'
 import type { ReportItem } from '@/api/http'
 
 const reports = ref<ReportItem[]>([])
@@ -31,8 +32,7 @@ function handleClose() {
 }
 
 function formatDate(iso: string): string {
-  if (!iso) return '-'
-  return new Date(iso).toLocaleString()
+  return formatTime(iso) || '-'
 }
 
 function confidenceClass(c: number): string {
@@ -108,9 +108,10 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: var(--bg-base);
   padding: 1.5rem 2rem;
   overflow-y: auto;
+  color: var(--text-primary);
 }
 
 .history-header {
@@ -122,82 +123,88 @@ onMounted(() => {
 
 .history-header h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--text-lg);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .refresh-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 1.1rem;
   cursor: pointer;
   padding: 0.25rem;
 }
 
 .refresh-btn:hover {
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .history-table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  border-radius: 0.5rem;
+  font-size: var(--text-sm);
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-}
-
-.history-table th,
-.history-table td {
-  padding: 0.75rem 1rem;
-  text-align: left;
-  font-size: 0.875rem;
-  border-bottom: 1px solid #e2e8f0;
+  border: 1px solid var(--border-subtle);
 }
 
 .history-table th {
-  background: #f1f5f9;
+  text-align: left;
+  padding: 0.75rem 1rem;
   font-weight: 600;
-  color: #475569;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-medium);
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.05em;
+  background: var(--bg-panel);
 }
 
-.history-table tr:hover {
-  background: #f8fafc;
+.history-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.history-table tr:hover td {
+  background: rgba(148, 163, 184, 0.04);
 }
 
 .confidence-badge {
   display: inline-block;
   padding: 0.125rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
   font-weight: 500;
 }
 
 .confidence-high {
-  background: #dcfce7;
-  color: #166534;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
 }
 
 .confidence-medium {
-  background: #fef9c3;
-  color: #854d0e;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--color-warning);
 }
 
 .confidence-low {
-  background: #fee2e2;
-  color: #991b1b;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger);
 }
 
 .view-btn {
-  background: #0f172a;
+  background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-md);
   padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   cursor: pointer;
+  transition: opacity var(--duration-fast);
 }
 
 .view-btn:hover {
@@ -208,17 +215,17 @@ onMounted(() => {
 .history-error {
   text-align: center;
   padding: 3rem;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .history-error {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .report-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -227,14 +234,15 @@ onMounted(() => {
 }
 
 .report-detail {
-  background: #fff;
-  border-radius: 0.75rem;
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
   width: 100%;
   max-width: 900px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--border-subtle);
 }
 
 .detail-header {
@@ -242,33 +250,35 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .detail-header h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-md);
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .close-btn {
   background: transparent;
   border: none;
   font-size: 1.5rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
 .close-btn:hover {
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .detail-body {
   flex: 1;
   overflow-y: auto;
   padding: 1.5rem;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   line-height: 1.7;
+  color: var(--text-primary);
 }
 </style>
 
@@ -282,18 +292,18 @@ onMounted(() => {
 }
 
 .markdown-body pre {
-  background: #f1f5f9;
+  background: var(--bg-elevated);
   padding: 0.75rem;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-md);
   overflow-x: auto;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }
 
 .markdown-body code {
-  background: #f1f5f9;
+  background: var(--bg-elevated);
   padding: 0.125rem 0.25rem;
-  border-radius: 0.25rem;
-  font-size: 0.8125rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
 }
 
 .markdown-body pre code {
@@ -313,24 +323,25 @@ onMounted(() => {
 .markdown-body h4 {
   margin: 0.75rem 0 0.5rem;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .markdown-body table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   margin: 0.5rem 0;
 }
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-subtle);
   padding: 0.375rem 0.5rem;
   text-align: left;
 }
 
 .markdown-body th {
-  background: #f1f5f9;
+  background: var(--bg-elevated);
   font-weight: 600;
 }
 </style>

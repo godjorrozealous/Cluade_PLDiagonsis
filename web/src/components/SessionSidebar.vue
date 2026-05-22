@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useSessionStore } from '@/stores/sessionStore'
 import { onMounted } from 'vue'
+import { formatTime } from '@/utils/time'
 
 const store = useSessionStore()
 
@@ -78,8 +79,8 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
         </div>
         <div class="session-meta">
           <span v-if="session.voltage_level" class="meta-tag">{{ session.voltage_level }}</span>
-          <span v-if="session.fault_time" class="meta-tag fault-time">{{ new Date(session.fault_time).toLocaleString() }}</span>
-          <span v-else class="meta-tag">{{ new Date(session.created_at).toLocaleString() }}</span>
+          <span v-if="session.fault_time" class="meta-tag fault-time">{{ formatTime(session.fault_time) }}</span>
+          <span v-else class="meta-tag">{{ formatTime(session.created_at) }}</span>
         </div>
       </li>
     </ul>
@@ -115,25 +116,27 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
 
 <style scoped>
 .sidebar {
-  width: 280px;
-  min-width: 280px;
-  background: #0f172a;
-  color: #e2e8f0;
+  width: 260px;
+  min-width: 260px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #1e293b;
+  border-right: 1px solid var(--border-subtle);
 }
 
 .sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid #1e293b;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 600;
+  font-size: var(--text-sm);
 }
 
 .sidebar-header h2 {
-  font-size: 1rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   margin: 0;
 }
@@ -141,7 +144,7 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
 .refresh-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 1.1rem;
   cursor: pointer;
   padding: 0.25rem;
@@ -149,31 +152,31 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
 }
 
 .refresh-btn:hover {
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .session-list {
   list-style: none;
   margin: 0;
-  padding: 0.5rem;
+  padding: 0;
   overflow-y: auto;
   flex: 1;
 }
 
 .session-item {
   padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-  transition: background 0.15s;
-  margin-bottom: 0.25rem;
+  transition: background var(--duration-fast);
 }
 
 .session-item:hover {
-  background: #1e293b;
+  background: var(--bg-elevated);
 }
 
 .session-item.active {
-  background: #334155;
+  background: rgba(59, 130, 246, 0.08);
+  border-left: 3px solid var(--color-primary);
 }
 
 .session-item.disabled {
@@ -194,14 +197,15 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
 
 .line-name {
   font-weight: 500;
-  font-size: 0.875rem;
+  font-size: var(--text-md);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-primary);
 }
 
 .status-badge {
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   padding: 0.15rem 0.4rem;
@@ -211,8 +215,8 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
 }
 
 .status-pending {
-  background: #475569;
-  color: #f1f5f9;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
 }
 
 @keyframes pulse {
@@ -221,23 +225,23 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
 }
 
 .status-diagnosing {
-  background: #f59e0b;
+  background: var(--color-warning);
   color: #fff;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 .status-modifying {
-  background: #3b82f6;
+  background: var(--color-primary);
   color: #fff;
 }
 
 .status-completed {
-  background: #10b981;
+  background: var(--color-success);
   color: #fff;
 }
 
 .status-excluded {
-  background: #ef4444;
+  background: var(--color-danger);
   color: #fff;
 }
 
@@ -247,54 +251,62 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
 }
 
 .session-meta {
-  font-size: 0.7rem;
-  color: #64748b;
-  margin-top: 0.25rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
   align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  font-size: var(--text-xs);
+  flex-wrap: wrap;
 }
 
 .meta-tag {
-  background: #1e293b;
-  color: #94a3b8;
-  padding: 0.05rem 0.375rem;
-  border-radius: 0.25rem;
-  font-size: 0.65rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.meta-tag.voltage {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-primary);
+  font-family: var(--font-mono);
 }
 
 .meta-tag.fault-time {
-  background: #7f1d1d;
-  color: #fca5a5;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: transparent;
+  padding: 0;
+  letter-spacing: 0.02em;
 }
 
 .empty {
   padding: 2rem;
   text-align: center;
-  color: #64748b;
-  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .sidebar-footer {
-  padding: 0.75rem 1.25rem;
-  border-top: 1px solid #1e293b;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .clear-all-btn {
   width: 100%;
   background: transparent;
-  color: #ef4444;
-  border: 1px solid #7f1d1d;
-  border-radius: 0.375rem;
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
   padding: 0.5rem;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast);
 }
 
 .clear-all-btn:hover {
-  background: #7f1d1d;
+  background: rgba(239, 68, 68, 0.15);
   color: #fff;
 }
 
@@ -302,30 +314,30 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 0.75rem 1.25rem;
-  border-top: 1px solid #1e293b;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .nav-link {
   background: transparent;
-  color: #94a3b8;
+  color: var(--text-secondary);
   border: 1px solid transparent;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-md);
   padding: 0.5rem 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   text-align: left;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast);
 }
 
 .nav-link:hover {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .nav-link.active {
-  background: #334155;
-  color: #e2e8f0;
-  border-color: #475569;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-medium);
 }
 </style>
