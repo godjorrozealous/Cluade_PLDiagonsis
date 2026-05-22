@@ -420,6 +420,9 @@ async def test_diagnose_success(diagnose_command: DiagnoseCommand) -> None:
     assert events[-1].event_type == EventType.COMPLETE
     diagnose_command.session_manager.add_summary.assert_called_once()
     diagnose_command.session_manager.transition.assert_called_with("s1", SessionStatus.MODIFYING)
+    # Verify active_template_name is passed to ReportComposer
+    call_kwargs = diagnose_command.report_composer.compose.call_args.kwargs
+    assert call_kwargs.get("active_template_name") == session.active_template_name
 
 
 @pytest.mark.asyncio
