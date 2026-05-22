@@ -55,5 +55,6 @@ class CompleteDiagnosisCommand(Command):
                 "message": "诊断已完成",
                 "status": session.status.value,
                 "line_name": session.line_name,
+                "suggest_save_skill": True,
             },
         )

@@ -817,9 +817,12 @@ def _resolve_command(intent_type: IntentType, container):
             state_machine=container.state_machine,
         )
     elif intent_type == IntentType.SAVE_STRATEGY:
-        return SaveStrategyCommand(
+        from src.application.commands.save_skill import SaveSkillCommand
+        return SaveSkillCommand(
+            llm_service=container.llm_service,
             session_manager=container.session_manager,
             state_machine=container.state_machine,
+            skill_loader=container.skill_loader,
         )
     elif intent_type == IntentType.COMPLETE:
         return CompleteDiagnosisCommand(

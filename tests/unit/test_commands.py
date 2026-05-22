@@ -28,7 +28,7 @@ from src.application.commands.diagnose import DiagnoseCommand
 from src.application.commands.exclude import ExcludeToolCommand
 from src.application.commands.include_tool import IncludeToolCommand
 from src.application.commands.recheck import RecheckToolCommand
-from src.application.commands.save_strategy import SaveStrategyCommand
+from src.application.commands.save_skill import SaveSkillCommand
 
 
 # ============================================================================
@@ -287,26 +287,28 @@ async def test_include_tool_success(include_command: IncludeToolCommand) -> None
     assert session.action_log[0].action_type == "include"
     assert session.action_log[0].parameters["tool_name"] == "ToolA"
 # ============================================================================
-# SaveStrategyCommand
+# SaveSkillCommand
 # ============================================================================
 
 
 @pytest.fixture
-def save_strategy_command(tmp_path: Path) -> SaveStrategyCommand:
-    """Return a SaveStrategyCommand with mocked dependencies."""
+def save_strategy_command(tmp_path: Path) -> SaveSkillCommand:
+    """Return a SaveSkillCommand with mocked dependencies."""
+    mock_llm = AsyncMock()
     mock_session_manager = MagicMock()
     mock_state_machine = MagicMock()
+    mock_skill_loader = MagicMock()
     mock_state_machine.can_execute.return_value = True
-    return SaveStrategyCommand(
-        mock_session_manager,
-        mock_state_machine,
-        strategies_dir=tmp_path / "strategies",
+    mock_llm.chat.return_value = "# 测试技能\n"
+    return SaveSkillCommand(
+        mock_llm, mock_session_manager, mock_state_machine, mock_skill_loader,
+        skills_dir=tmp_path / "skills",
     )
 
 
 @pytest.mark.asyncio
-async def test_save_strategy_success(save_strategy_command: SaveStrategyCommand) -> None:
-    """save_strategy persists strategy to file and returns payload."""
+async def test_save_strategy_success(save_strategy_command: SaveSkillCommand) -> None:
+    """save_skill persists skill to file and returns payload."""
     session = DiagnosisSession(session_id="s1", line_name="京西线", status=SessionStatus.MODIFYING)
     session.active_weights = {"ToolA": 1.0}
     session.excluded_tools = ["ToolB"]
@@ -322,18 +324,17 @@ async def test_save_strategy_success(save_strategy_command: SaveStrategyCommand)
     assert len(events) == 2
     assert events[-1].event_type == EventType.COMPLETE
     payload = events[-1].payload
-    assert payload["strategy_name"] == "my_strategy"
-    assert payload["tool_weights"] == {"ToolA": 1.0}
-    assert payload["excluded_tools"] == ["ToolB"]
+    assert payload["skill_name"] == "my_strategy"
+    assert "file_path" in payload
 
     # Verify file was written
-    strategy_file = save_strategy_command.strategies_dir / "my_strategy.json"
-    assert strategy_file.exists()
+    skill_file = save_strategy_command.skills_dir / "my_strategy.md"
+    assert skill_file.exists()
 
 
 @pytest.mark.asyncio
-async def test_save_strategy_auto_name(save_strategy_command: SaveStrategyCommand) -> None:
-    """save_strategy generates a name when strategy_name is not provided."""
+async def test_save_strategy_auto_name(save_strategy_command: SaveSkillCommand) -> None:
+    """save_skill generates a name when strategy_name is not provided."""
     session = DiagnosisSession(session_id="s1", line_name="京西线", status=SessionStatus.MODIFYING)
     intent = Intent(
         intent_type=IntentType.SAVE_STRATEGY,
@@ -345,12 +346,12 @@ async def test_save_strategy_auto_name(save_strategy_command: SaveStrategyComman
     events = [e async for e in save_strategy_command.execute(ctx)]
 
     payload = events[-1].payload
-    assert payload["strategy_name"].startswith("strategy_")
+    assert payload["skill_name"].startswith("skill_")
 
 
 @pytest.mark.asyncio
-async def test_save_strategy_invalid_state(save_strategy_command: SaveStrategyCommand) -> None:
-    """save_strategy raises InvalidStateError when state machine rejects."""
+async def test_save_strategy_invalid_state(save_strategy_command: SaveSkillCommand) -> None:
+    """save_skill raises InvalidStateError when state machine rejects."""
     save_strategy_command.state_machine.can_execute.return_value = False
     session = DiagnosisSession(session_id="s1", line_name="京西线", status=SessionStatus.PENDING)
     intent = Intent(
