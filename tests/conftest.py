@@ -20,7 +20,6 @@ from src.core.models import (
 from src.core.config import AppConfig
 from src.domain.state_machine import StateMachine
 from src.domain.session_manager import SessionManager
-from src.domain.weight_engine import WeightEngine
 from src.infrastructure.adapters.base import ToolAdapter
 from src.infrastructure.event_bus import EventBus
 
@@ -46,12 +45,6 @@ def state_machine(event_bus: EventBus) -> StateMachine:
 def session_manager(event_bus: EventBus, state_machine: StateMachine) -> SessionManager:
     """Return a SessionManager wired to event_bus and state_machine."""
     return SessionManager(event_bus, state_machine)
-
-
-@pytest.fixture
-def weight_engine() -> WeightEngine:
-    """Return a WeightEngine with default bounds."""
-    return WeightEngine()
 
 
 # ---------------------------------------------------------------------------

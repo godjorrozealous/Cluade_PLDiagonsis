@@ -3,12 +3,11 @@
 import logging
 from typing import AsyncIterator
 
-from src.core.models import DiagnosisSummary, Event, ExecutionContext, SessionStatus, UserAction
+from src.core.models import Event, ExecutionContext, SessionStatus, UserAction
 from src.core.exceptions import InvalidStateError, WeightValidationError
 from src.application.commands.base import Command
 from src.domain.session_manager import SessionManager
 from src.domain.state_machine import StateMachine
-from src.domain.weight_engine import WeightEngine
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +18,15 @@ WEIGHT_MAX = 2.0
 class AdjustWeightCommand(Command):
     """调整权重 Command
 
-    调整指定工具的权重，验证范围后更新 active_weights，
-    如果有 current_summary 则重新加权计算。
+    调整指定工具的权重，验证范围后更新 active_weights。
+    纯状态更新，不重新计算加权结果（由 LLM 通过 Skill 自主计算）。
     """
 
     def __init__(
         self,
-        weight_engine: WeightEngine,
         session_manager: SessionManager,
         state_machine: StateMachine,
     ):
-        self.weight_engine = weight_engine
         self.session_manager = session_manager
         self.state_machine = state_machine
 
@@ -56,27 +53,15 @@ class AdjustWeightCommand(Command):
             )
         )
 
-        updated_summary = self._maybe_recompute(session)
-
         logger.info(f"权重调整完成: {session.session_id} -> {tool_name}={new_weight}")
 
-        payload = {
-            "message": f"已调整 {tool_name} 权重为 {new_weight}",
-            "active_weights": session.active_weights,
-        }
-        if updated_summary:
-            payload["primary_diagnosis"] = (
-                updated_summary.primary_diagnosis.fault_type
-                if updated_summary.primary_diagnosis
-                else "未知"
-            )
-            payload["confidence"] = (
-                updated_summary.primary_diagnosis.confidence
-                if updated_summary.primary_diagnosis
-                else 0
-            )
-
-        yield Event.complete(session.session_id, payload)
+        yield Event.complete(
+            session.session_id,
+            {
+                "message": f"已调整 {tool_name} 权重为 {new_weight}",
+                "active_weights": session.active_weights,
+            },
+        )
 
     def _extract_params(self, ctx: ExecutionContext) -> tuple[str, float]:
         """从意图参数中提取工具名和新权重"""
@@ -111,28 +96,3 @@ class AdjustWeightCommand(Command):
             raise WeightValidationError(
                 f"权重 {tool_name}={weight} 超出范围 [{WEIGHT_MIN}, {WEIGHT_MAX}]"
             )
-
-    def _maybe_recompute(self, session) -> DiagnosisSummary | None:
-        """如有 current_summary，则重新加权计算"""
-        current = session.current_summary
-        if not current:
-            return None
-
-        tool_outputs = self._rebuild_outputs(current)
-        weights = session.active_weights.copy()
-        new_summary = self.weight_engine.compute(tool_outputs, weights)
-        self.session_manager.add_summary(session.session_id, new_summary)
-        return new_summary
-
-    def _rebuild_outputs(self, current) -> dict:
-        """从 current_summary 重建工具输出字典"""
-        from src.core.models import ToolOutput
-
-        outputs = {}
-        for result in current.results:
-            outputs[result.tool_name] = ToolOutput(
-                tool_name=result.tool_name,
-                raw_text=result.details.get("raw_text", ""),
-                structured_data=result.details,
-            )
-        return outputs

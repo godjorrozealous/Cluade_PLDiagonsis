@@ -17,7 +17,6 @@ from src.infrastructure.session_repository import SessionRepository
 from src.domain.state_machine import StateMachine
 from src.domain.session_manager import SessionManager
 from src.domain.intent_classifier import IntentClassifier
-from src.domain.weight_engine import WeightEngine
 from src.domain.report_engine import ReportEngine
 from src.domain.skill_loader import SkillLoader
 from src.domain.prompt_builder import PromptBuilder
@@ -41,10 +40,6 @@ class Container:
             self.event_bus, self.state_machine, self.session_repository
         )
         self.intent_classifier = IntentClassifier(self.llm_service)
-        self.weight_engine = WeightEngine(
-            min_weight=self.config.diagnosis.weight_min,
-            max_weight=self.config.diagnosis.weight_max,
-        )
         self.report_engine = ReportEngine(self.llm_service, self.event_bus)
         self.template_parser = TemplateParser()
         self.skill_loader = SkillLoader()

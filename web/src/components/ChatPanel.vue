@@ -23,13 +23,20 @@ function toggleReport(msgId: string) {
 }
 
 function getActionLogForReview(): Array<{ action_type: string; tool_name: string; description: string; weight?: number }> {
-  const session = store.activeSession
+  const sid = reviewSessionId.value
+  if (!sid) return []
+  const session = store.sessions.find((s) => s.session_id === sid)
   if (!session) return []
   return session.action_log ?? []
 }
 
 watch(() => store.messages.length, scrollToBottom)
 watch(() => store.messages.map((m) => m.content), scrollToBottom, { deep: true })
+watch(() => store.activeSessionId, () => {
+  showCompletionReview.value = false
+  reviewSessionId.value = null
+  reportExpanded.value = {}
+})
 
 function handleSend() {
   if (!input.value.trim() || store.isLoading) return
@@ -83,6 +90,7 @@ async function handleSkipSave() {
 function handleClearMessages() {
   if (confirm('确定要清除当前对话的所有消息吗？')) {
     store.clearMessages()
+    reportExpanded.value = {}
   }
 }
 

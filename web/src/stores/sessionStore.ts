@@ -154,7 +154,7 @@ export const useSessionStore = defineStore('session', () => {
                   tool_name: a.tool_name,
                   description: a.description,
                   weight: a.weight,
-                  timestamp: new Date().toISOString(),
+                  timestamp: a.timestamp || new Date().toISOString(),
                 })),
               }
             }

@@ -728,13 +728,11 @@ def _resolve_command(intent_type: IntentType, container):
     elif intent_type == IntentType.RECHECK_TOOL:
         return RecheckToolCommand(
             tool_registry=container.tool_registry,
-            weight_engine=container.weight_engine,
             session_manager=container.session_manager,
             state_machine=container.state_machine,
         )
     elif intent_type == IntentType.ADJUST_WEIGHT:
         return AdjustWeightCommand(
-            weight_engine=container.weight_engine,
             session_manager=container.session_manager,
             state_machine=container.state_machine,
         )

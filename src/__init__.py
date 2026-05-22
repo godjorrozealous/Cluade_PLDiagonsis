@@ -55,7 +55,6 @@ from src.application.context import ContextBuilder
 
 from src.domain.state_machine import StateMachine
 from src.domain.session_manager import SessionManager
-from src.domain.weight_engine import WeightEngine
 from src.domain.report_engine import ReportEngine
 from src.domain.intent_classifier import IntentClassifier
 
@@ -124,7 +123,6 @@ __all__ = [
     # Domain
     "StateMachine",
     "SessionManager",
-    "WeightEngine",
     "ReportEngine",
     "IntentClassifier",
     # Infrastructure

@@ -65,11 +65,10 @@ def _make_context(
 @pytest.fixture
 def adjust_command() -> AdjustWeightCommand:
     """Return an AdjustWeightCommand with mocked dependencies."""
-    mock_weight_engine = MagicMock()
     mock_session_manager = MagicMock()
     mock_state_machine = MagicMock()
     mock_state_machine.can_execute.return_value = True
-    return AdjustWeightCommand(mock_weight_engine, mock_session_manager, mock_state_machine)
+    return AdjustWeightCommand(mock_session_manager, mock_state_machine)
 
 
 @pytest.mark.asyncio
@@ -161,36 +160,6 @@ async def test_adjust_weight_out_of_range(adjust_command: AdjustWeightCommand) -
         [e async for e in adjust_command.execute(ctx)]
 
     assert "超出范围" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_adjust_weight_recomputes_when_summary_exists(adjust_command: AdjustWeightCommand) -> None:
-    """adjust_weight recomputes summary when current_summary exists."""
-    session = DiagnosisSession(session_id="s1", line_name="京西线", status=SessionStatus.MODIFYING)
-    session.current_summary = DiagnosisSummary(
-        results=[
-            DiagnosisResult(
-                fault_type="雷击",
-                confidence=0.8,
-                confidence_level=ConfidenceLevel.HIGH,
-                tool_name="ToolA",
-                details={"raw_text": "result"},
-            ),
-        ],
-    )
-    intent = Intent(
-        intent_type=IntentType.ADJUST_WEIGHT,
-        confidence=0.9,
-        parameters={"tool_name": "ToolA", "weight": "1.5"},
-    )
-    ctx = _make_context(session, intent=intent)
-    adjust_command.weight_engine.compute.return_value = session.current_summary
-
-    events = [e async for e in adjust_command.execute(ctx)]
-
-    assert events[-1].event_type == EventType.COMPLETE
-    adjust_command.weight_engine.compute.assert_called_once()
-    adjust_command.session_manager.add_summary.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -415,7 +384,7 @@ def diagnose_command() -> DiagnoseCommand:
 
     mock_state_machine.can_execute.return_value = True
     mock_registry.list_tools.return_value = []
-    mock_skill_loader.load.return_value = "# skill"
+    mock_skill_loader.load.return_value = ("# skill", {})
     mock_prompt_builder.build.return_value = "prompt"
     mock_diagnosis_planner.plan.return_value = {
         "tools_to_call": [{"name": "ToolA", "rationale": "test", "parallel": True}],
@@ -473,14 +442,12 @@ async def test_diagnose_invalid_state(diagnose_command: DiagnoseCommand) -> None
 def recheck_command() -> RecheckToolCommand:
     """Return a RecheckToolCommand with mocked dependencies."""
     mock_registry = MagicMock()
-    mock_weight_engine = MagicMock()
     mock_session_manager = MagicMock()
     mock_state_machine = MagicMock()
     mock_state_machine.can_execute.return_value = True
     mock_registry.list_tool_names.return_value = ["ToolA"]
     mock_registry.execute_tool = AsyncMock(return_value=ToolOutput(tool_name="ToolA", raw_text="rechecked"))
-    mock_weight_engine.compute.return_value = DiagnosisSummary()
-    return RecheckToolCommand(mock_registry, mock_weight_engine, mock_session_manager, mock_state_machine)
+    return RecheckToolCommand(mock_registry, mock_session_manager, mock_state_machine)
 
 
 @pytest.mark.asyncio
@@ -500,7 +467,6 @@ async def test_recheck_tool_success(recheck_command: RecheckToolCommand) -> None
     assert any(e.event_type == EventType.RESULT for e in events)
     assert events[-1].event_type == EventType.COMPLETE
     recheck_command.session_manager.add_rechecked.assert_called_once_with("s1", "ToolA")
-    recheck_command.session_manager.add_summary.assert_called_once()
 
 
 @pytest.mark.asyncio

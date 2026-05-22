@@ -9,6 +9,7 @@ from src.core.models import (
     DiagnosisSession,
     EventType,
     ExecutionContext,
+    FaultContext,
     SessionStatus,
     ToolOutput,
 )
@@ -29,7 +30,7 @@ def diagnose_command() -> DiagnoseCommand:
     mock_report_composer = AsyncMock()
 
     mock_state_machine.can_execute.return_value = True
-    mock_skill_loader.load.return_value = "# skill"
+    mock_skill_loader.load.return_value = ("# skill", {})
     mock_prompt_builder.build.return_value = "prompt"
     mock_diagnosis_planner.plan.return_value = {
         "tools_to_call": [{"name": "ToolA"}],
@@ -64,6 +65,12 @@ async def test_diagnose_command_uses_new_flow(diagnose_command: DiagnoseCommand)
     diagnosis_ctx = DiagnosisContext(
         session_id="s1",
         line_name="武汉线",
+        fault_context=FaultContext(
+            line_id="s1",
+            line_name="武汉线",
+            fault_time=None,
+            additional_info={},
+        ),
     )
     ctx = ExecutionContext(
         session=session,

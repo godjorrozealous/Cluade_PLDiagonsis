@@ -6,7 +6,7 @@
 import logging
 from typing import AsyncIterator
 
-from src.core.models import Event, ExecutionContext, SessionStatus
+from src.core.models import Event, ExecutionContext, SessionStatus, UserAction
 from src.core.exceptions import InvalidStateError
 from src.application.commands.base import Command
 from src.domain.session_manager import SessionManager
@@ -36,6 +36,10 @@ class CompleteDiagnosisCommand(Command):
             raise InvalidStateError(
                 f"当前状态 {session.status.value} 不允许完成诊断"
             )
+
+        session.action_log.append(
+            UserAction(action_type="complete", parameters={})
+        )
 
         self.session_manager.transition(session.session_id, SessionStatus.COMPLETED)
         yield Event.status(

@@ -4,7 +4,6 @@ import logging
 from typing import AsyncIterator
 
 from src.core.models import (
-    DiagnosisSummary,
     Event,
     ExecutionContext,
     FaultContext,
@@ -15,7 +14,6 @@ from src.application.commands.base import Command
 from src.infrastructure.adapters.registry import ToolRegistry
 from src.domain.session_manager import SessionManager
 from src.domain.state_machine import StateMachine
-from src.domain.weight_engine import WeightEngine
 
 logger = logging.getLogger(__name__)
 
@@ -23,19 +21,17 @@ logger = logging.getLogger(__name__)
 class RecheckToolCommand(Command):
     """重新检查工具 Command
 
-    对指定工具重新执行诊断，更新 rechecked_tools 列表，
-    获取新结果后更新 current_summary。
+    对指定工具重新执行诊断，更新 rechecked_tools 列表。
+    不重新计算加权摘要（由 LLM 通过 Skill 自主计算）。
     """
 
     def __init__(
         self,
         tool_registry: ToolRegistry,
-        weight_engine: WeightEngine,
         session_manager: SessionManager,
         state_machine: StateMachine,
     ):
         self.tool_registry = tool_registry
-        self.weight_engine = weight_engine
         self.session_manager = session_manager
         self.state_machine = state_machine
 
@@ -71,9 +67,6 @@ class RecheckToolCommand(Command):
 
         self.session_manager.add_rechecked(session.session_id, tool_name)
 
-        updated_summary = self._recompute_summary(ctx, tool_name, tool_output)
-        self.session_manager.add_summary(session.session_id, updated_summary)
-
         self.session_manager.transition(session.session_id, SessionStatus.MODIFYING)
         yield Event.status(
             session.session_id,
@@ -87,9 +80,6 @@ class RecheckToolCommand(Command):
             {
                 "message": f"已重新检查 {tool_name}",
                 "rechecked_tools": session.rechecked_tools,
-                "primary_diagnosis": updated_summary.primary_diagnosis.fault_type
-                if updated_summary.primary_diagnosis
-                else "未知",
             },
         )
 
@@ -122,38 +112,3 @@ class RecheckToolCommand(Command):
             line_id=session.session_id,
             line_name=session.line_name,
         )
-
-    def _recompute_summary(
-        self, ctx: ExecutionContext, tool_name: str, new_output
-    ) -> DiagnosisSummary:
-        """重新计算诊断摘要"""
-        current = ctx.session.current_summary
-        if not current:
-            return self._compute_from_single(tool_name, new_output, ctx)
-
-        tool_outputs = self._gather_outputs(current, tool_name, new_output)
-        weights = getattr(ctx.diagnosis_ctx, 'weights', None) or ctx.session.active_weights
-        return self.weight_engine.compute(tool_outputs, weights)
-
-    def _gather_outputs(self, current, tool_name, new_output):
-        """收集所有工具输出（用新输出替换旧输出）"""
-        outputs = {}
-        for result in current.results:
-            if result.tool_name != tool_name:
-                outputs[result.tool_name] = self._result_to_output(result)
-        outputs[tool_name] = new_output
-        return outputs
-
-    def _result_to_output(self, result):
-        """将 DiagnosisResult 转换为 ToolOutput（简化版）"""
-        from src.core.models import ToolOutput
-        return ToolOutput(
-            tool_name=result.tool_name,
-            raw_text=result.details.get("raw_text", ""),
-            structured_data=result.details,
-        )
-
-    def _compute_from_single(self, tool_name, output, ctx):
-        """仅基于单个工具输出计算摘要"""
-        weights = ctx.diagnosis_ctx.weights or ctx.session.active_weights
-        return self.weight_engine.compute({tool_name: output}, weights)

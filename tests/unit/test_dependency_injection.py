@@ -23,7 +23,6 @@ def test_container_initializes_components() -> None:
     assert container.state_machine is not None
     assert container.session_manager is not None
     assert container.intent_classifier is not None
-    assert container.weight_engine is not None
     assert container.report_engine is not None
     assert container.template_parser is not None
 
