@@ -441,18 +441,20 @@ def create_app() -> Flask:
         if ext not in allowed:
             return jsonify({"error": f"不支持的格式: {ext}"}), 400
 
+        temp_path = None
         try:
             temp_path = Path("/tmp") / file.filename
             file.save(temp_path)
 
             registry = container.template_registry
             result = registry.upload(temp_path, file.filename)
-            temp_path.unlink(missing_ok=True)
-
             return jsonify({"success": True, "template": result})
         except Exception as e:
             logger.error(f"上传模板失败: {e}")
             return jsonify({"error": str(e)}), 500
+        finally:
+            if temp_path:
+                temp_path.unlink(missing_ok=True)
 
     @app.route("/api/templates/activate", methods=["POST"])
     def activate_template():

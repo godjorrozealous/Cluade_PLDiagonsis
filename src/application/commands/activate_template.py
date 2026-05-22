@@ -40,6 +40,8 @@ class ActivateTemplateCommand(Command):
         session.active_template_name = template_name
         self.session_manager._persist()
 
+        logger.info(f"模板已激活: {template_name}")
+
         yield Event.complete(
             session.session_id,
             {
