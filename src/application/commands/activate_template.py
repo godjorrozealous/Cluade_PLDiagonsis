@@ -34,8 +34,7 @@ class ActivateTemplateCommand(Command):
 
         success = self.template_registry.activate(template_name)
         if not success:
-            yield Event.error(session.session_id, f"模板 '{template_name}' 不存在或解析失败")
-            return
+            raise InvalidStateError(f"模板 '{template_name}' 不存在或解析失败")
 
         session.active_template_name = template_name
         self.session_manager._persist()
