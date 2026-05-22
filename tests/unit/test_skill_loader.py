@@ -5,6 +5,54 @@ import pytest
 from src.domain.skill_loader import DEFAULT_SKILL_CONTENT, SkillLoader
 
 
+class TestSkillLoaderFrontmatter:
+    def test_load_skill_with_yaml_frontmatter(self, tmp_path):
+        """SkillLoader 能解析 YAML frontmatter 和 description"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_file = skills_dir / "test_skill.md"
+        skill_file.write_text("""---
+name: test_skill
+description: |
+  当用户提到输电线路故障时触发此技能。
+  适用于各种电压等级线路。
+---
+
+# 测试技能
+
+## 工具权重
+
+```yaml
+weights:
+  ToolA: 1.0
+  ToolB: 0.8
+```
+""")
+        loader = SkillLoader(str(skills_dir))
+        content, weights = loader.load("test_skill")
+
+        assert "name: test_skill" in content
+        assert "当用户提到输电线路故障时触发此技能" in content
+        assert weights == {"ToolA": 1.0, "ToolB": 0.8}
+
+    def test_load_skill_without_frontmatter(self, tmp_path):
+        """无 frontmatter 的 Skill 也能正常加载，weights 从代码块提取"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_file = skills_dir / "legacy.md"
+        skill_file.write_text("""# 旧格式技能
+
+```yaml
+weights:
+  ToolA: 1.0
+```
+""")
+        loader = SkillLoader(str(skills_dir))
+        content, weights = loader.load("legacy")
+
+        assert weights == {"ToolA": 1.0}
+
+
 # ============================================================================
 # load
 # ============================================================================
