@@ -36,7 +36,7 @@ class FaultContextParser:
 
     # 时间模式
     TIME_PATTERNS = [
-        # 2024-06-15 14:30:00
+        # 2024-06-15 14:30:00.123 or 2024-06-15 14:30:00 or 2024-06-15 14:30
         re.compile(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.(\d{3}))?"),
         # 2024年6月15日14时30分 / 2024年6月15日14点30分
         re.compile(r"(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{1,2})[时点](\d{1,2})分?"),
@@ -157,6 +157,7 @@ class FaultContextParser:
                     year, month, day = int(groups[0]), int(groups[1]), int(groups[2])
                     hour, minute = int(groups[3]), int(groups[4])
                     second = int(groups[5]) if groups[5] else 0
+                    # Only the first TIME_PATTERN captures milliseconds (group 6)
                     microsecond = int(groups[6]) * 1000 if len(groups) > 6 and groups[6] else 0
                     return datetime(year, month, day, hour, minute, second, microsecond)
                 elif len(groups) >= 5 and "年" in message:
