@@ -1,12 +1,9 @@
 """Word 模板解析器"""
 
-import logging
 from pathlib import Path
 from datetime import datetime
 
 from .base import TemplateParser, ParsedTemplate
-
-logger = logging.getLogger(__name__)
 
 
 class DocxTemplateParser(TemplateParser):
@@ -39,7 +36,6 @@ class DocxTemplateParser(TemplateParser):
             "",
         ]
 
-        page_num = 1
         for para in doc.paragraphs:
             style = para.style.name if para.style else ""
             text = para.text.strip()
@@ -47,10 +43,15 @@ class DocxTemplateParser(TemplateParser):
                 continue
 
             if style in self.HEADING_STYLES:
-                level = 1 if "1" in style or style == "Heading 1" else 2
+                if style in ("Heading 1", "标题 1"):
+                    level = 1
+                elif style in ("Heading 3", "标题 3"):
+                    level = 3
+                else:
+                    level = 2
                 chapters.append({"level": level, "title": text})
                 lines.append(f"### {text}")
-                lines.append(f"- **原始位置**：第{page_num}页，{style}")
+                lines.append(f"- **原始位置**：{style}")
                 lines.append("")
 
         return ParsedTemplate(

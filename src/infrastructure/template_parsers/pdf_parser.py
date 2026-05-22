@@ -1,12 +1,9 @@
 """PDF 模板解析器"""
 
-import logging
 from pathlib import Path
 from datetime import datetime
 
 from .base import TemplateParser, ParsedTemplate
-
-logger = logging.getLogger(__name__)
 
 
 class PdfTemplateParser(TemplateParser):
@@ -39,8 +36,8 @@ class PdfTemplateParser(TemplateParser):
                 if not text:
                     continue
                 # 简单启发式：以数字或中文数字开头的短行可能是标题
-                for line in text.splitlines():
-                    line = line.strip()
+                for raw_line in text.splitlines():
+                    line = raw_line.strip()
                     if 4 <= len(line) <= 30 and (
                         line.startswith(("第", "一", "二", "三", "四", "五")) or
                         (line[0].isdigit() and " " in line)
