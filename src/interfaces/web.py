@@ -23,6 +23,7 @@ from src.application.commands.recheck import RecheckToolCommand
 from src.application.commands.adjust_weight import AdjustWeightCommand
 from src.application.commands.save_strategy import SaveStrategyCommand
 from src.application.commands.complete_diagnosis import CompleteDiagnosisCommand
+from src.application.commands.modify_report import ModifyReportCommand
 from src.application.context import ContextBuilder
 from src.interfaces.dependency_injection import get_container
 from src.infrastructure.fault_parser import FaultContextParser
@@ -824,6 +825,13 @@ def _resolve_command(intent_type: IntentType, container):
         return CompleteDiagnosisCommand(
             session_manager=container.session_manager,
             state_machine=container.state_machine,
+        )
+    elif intent_type == IntentType.MODIFY_REPORT:
+        return ModifyReportCommand(
+            llm_service=container.llm_service,
+            session_manager=container.session_manager,
+            state_machine=container.state_machine,
+            skill_loader=container.skill_loader,
         )
     return None
 
