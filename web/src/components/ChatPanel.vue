@@ -3,6 +3,7 @@ import { ref, nextTick, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { renderMarkdown } from '@/utils/markdown'
 import { createSkill } from '@/api/http'
+import { formatTime } from '@/utils/time'
 
 const store = useSessionStore()
 const input = ref('')
@@ -10,6 +11,8 @@ const listRef = ref<HTMLDivElement | null>(null)
 const reportExpanded = ref<Record<string, boolean>>({})
 const showCompletionReview = ref(false)
 const reviewSessionId = ref<string | null>(null)
+const showModifyInput = ref(false)
+const modifyInstruction = ref('')
 
 async function scrollToBottom() {
   await nextTick()
@@ -112,6 +115,29 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
       return `${action.action_type}${action.tool_name ? ': ' + action.tool_name : ''}`
   }
 }
+
+// @ts-expect-error Reserved for future action panel buttons
+function handleExcludeTool(toolName: string) {
+  store.postMessage(`排除${toolName}`)
+}
+// @ts-expect-error Reserved for future action panel buttons
+function handleRecheckTool(toolName: string) {
+  store.postMessage(`重新检查${toolName}`)
+}
+// @ts-expect-error Reserved for future action panel buttons
+function handleAdjustWeight(toolName: string) {
+  const w = prompt(`调整 ${toolName} 权重 (0.1-2.0):`)
+  if (w) store.postMessage(`把${toolName}权重调到${w}`)
+}
+function handleModifyReport() {
+  showModifyInput.value = true
+}
+function submitModifyReport() {
+  if (!modifyInstruction.value.trim()) return
+  store.postMessage(modifyInstruction.value)
+  modifyInstruction.value = ''
+  showModifyInput.value = false
+}
 </script>
 
 <template>
@@ -156,7 +182,7 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
               </div>
               <div v-if="msg.summary.fault_time" class="summary-row">
                 <span class="summary-label">故障时间</span>
-                <span class="summary-value">{{ msg.summary.fault_time }}</span>
+                <span class="summary-value time">{{ formatTime(msg.summary.fault_time) }}</span>
               </div>
               <div class="summary-row">
                 <span class="summary-label">故障类型</span>
@@ -164,6 +190,13 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
               </div>
               <div class="summary-row">
                 <span class="summary-label">置信度</span>
+                <div class="confidence-bar">
+                  <div
+                    class="confidence-bar-fill"
+                    :class="{ high: msg.summary.confidence >= 0.7, medium: msg.summary.confidence >= 0.4 && msg.summary.confidence < 0.7, low: msg.summary.confidence < 0.4 }"
+                    :style="{ width: (msg.summary.confidence * 100) + '%' }"
+                  />
+                </div>
                 <span class="summary-value">{{ Math.round(msg.summary.confidence * 100) }}%</span>
               </div>
             </div>
@@ -194,6 +227,25 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
               >
                 完成诊断
               </button>
+            </div>
+            <!-- Action Panel -->
+            <div v-if="store.activeSession?.status === 'modifying'" class="action-panel">
+              <div class="action-panel-title">快捷操作</div>
+              <div class="action-buttons">
+                <button class="action-btn" @click="handleModifyReport">修改报告</button>
+              </div>
+              <div v-if="showModifyInput" class="modify-input-panel">
+                <textarea
+                  v-model="modifyInstruction"
+                  rows="2"
+                  placeholder="描述您想要的修改..."
+                  @keydown="(e: KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitModifyReport() } }"
+                ></textarea>
+                <div class="modify-actions">
+                  <button class="action-btn primary" @click="submitModifyReport">确认</button>
+                  <button class="action-btn" @click="showModifyInput = false">取消</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -288,8 +340,9 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: var(--bg-base);
   min-width: 0;
+  color: var(--text-primary);
 }
 
 .message-list {
@@ -319,37 +372,37 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 
 .bubble {
   padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  font-size: 0.9375rem;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-md);
   line-height: 1.6;
   word-break: break-word;
 }
 
 .bubble-user {
-  background: #0f172a;
+  background: var(--color-primary);
   color: #fff;
-  border-bottom-right-radius: 0.25rem;
+  border-bottom-right-radius: var(--radius-sm);
 }
 
 .bubble-assistant {
-  background: #fff;
-  color: #1e293b;
-  border: 1px solid #e2e8f0;
-  border-bottom-left-radius: 0.25rem;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-bottom-left-radius: var(--radius-sm);
 }
 
 .bubble-thinking {
-  background: #fffbeb;
-  color: #92400e;
-  border: 1px solid #fde68a;
-  border-bottom-left-radius: 0.25rem;
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-bottom-left-radius: var(--radius-sm);
 }
 
 .bubble-error {
-  background: #fef2f2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-  border-bottom-left-radius: 0.25rem;
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-bottom-left-radius: var(--radius-sm);
 }
 
 .thinking {
@@ -363,86 +416,32 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
   display: inline-block;
   width: 0.875rem;
   height: 0.875rem;
-  border: 2px solid #fbbf24;
+  border: 2px solid var(--color-warning);
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.thinking-block {
-  margin-bottom: 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  background: #f8fafc;
-  overflow: hidden;
-}
-
-.thinking-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  width: 100%;
-  padding: 0.375rem 0.625rem;
-  background: transparent;
-  border: none;
-  font-size: 0.8125rem;
-  color: #64748b;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.thinking-toggle:hover {
-  background: #f1f5f9;
-}
-
-.toggle-icon {
-  display: inline-block;
-  font-size: 0.625rem;
-  transition: transform 0.2s;
-}
-
-.toggle-icon.collapsed {
-  transform: rotate(-90deg);
-}
-
-.thinking-content {
-  padding: 0.5rem 0.75rem;
-  border-top: 1px solid #e2e8f0;
-}
-
-.thinking-content pre {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: #475569;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 300px;
-  overflow-y: auto;
+  to { transform: rotate(360deg); }
 }
 
 .msg-time {
-  font-size: 0.6875rem;
-  color: #94a3b8;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
   margin-top: 0.25rem;
 }
 
 .welcome {
   margin: auto;
   text-align: center;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .welcome h1 {
-  font-size: 1.5rem;
+  font-size: var(--text-xl);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
@@ -451,72 +450,74 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 2rem;
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
-  font-size: 0.8125rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  font-size: var(--text-sm);
 }
 
 .msg-count {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .clear-btn {
   background: transparent;
-  color: #ef4444;
-  border: 1px solid #fecaca;
-  border-radius: 0.375rem;
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
   padding: 0.25rem 0.625rem;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast);
 }
 
 .clear-btn:hover {
-  background: #fef2f2;
-  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  color: #fff;
 }
 
 .input-area {
   display: flex;
   gap: 0.75rem;
   padding: 1rem 2rem;
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
 }
 
 .input-area textarea {
   flex: 1;
   resize: none;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.5rem;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
   padding: 0.625rem 0.875rem;
-  font-size: 0.9375rem;
+  font-size: var(--text-md);
   font-family: inherit;
   line-height: 1.5;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--duration-fast);
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
 .input-area textarea:focus {
-  border-color: #0f172a;
+  border-color: var(--color-primary);
 }
 
 .input-area textarea:disabled {
-  background: #f1f5f9;
+  background: var(--bg-elevated);
   cursor: not-allowed;
 }
 
 .send-btn {
   align-self: flex-end;
-  background: #0f172a;
+  background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity var(--duration-fast);
 }
 
 .send-btn:hover:not(:disabled) {
@@ -524,73 +525,100 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 }
 
 .send-btn:disabled {
-  background: #94a3b8;
+  background: var(--text-muted);
   cursor: not-allowed;
 }
 
 .error-bar {
   padding: 0.75rem 2rem;
-  background: #fef2f2;
-  color: #991b1b;
-  font-size: 0.875rem;
-  border-top: 1px solid #fecaca;
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  border-top: 1px solid rgba(239, 68, 68, 0.2);
 }
 
-/* Summary card styles */
+/* Summary card */
 .summary-card {
-  background: #f0fdf4;
-  border: 1px solid #86efac;
-  border-radius: 0.75rem;
-  padding: 1rem;
-  min-width: 240px;
+  background: var(--bg-panel-glass);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+  min-width: 280px;
 }
 
 .summary-header {
+  padding: 0.75rem 1rem;
+  background: rgba(16, 185, 129, 0.08);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-weight: 600;
-  font-size: 1rem;
-  color: #14532d;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #86efac;
+  color: var(--color-success);
 }
 
 .summary-body {
+  padding: 0.75rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-bottom: 1rem;
 }
 
 .summary-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.875rem;
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.summary-row:last-child {
+  border-bottom: none;
 }
 
 .summary-label {
-  color: #166534;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
 .summary-value {
   font-weight: 600;
-  color: #14532d;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
 }
 
-.summary-actions {
-  display: flex;
-  gap: 0.5rem;
+.summary-value.time {
+  font-family: var(--font-mono);
+  color: var(--color-accent);
 }
+
+.confidence-bar {
+  width: 120px;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.confidence-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width var(--duration-slow) var(--ease-out-expo);
+}
+
+.confidence-bar-fill.high { background: var(--color-success); }
+.confidence-bar-fill.medium { background: var(--color-warning); }
+.confidence-bar-fill.low { background: var(--color-danger); }
 
 .action-log {
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #86efac;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .action-log-label {
-  font-size: 0.75rem;
-  color: #166534;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
   margin-bottom: 0.375rem;
 }
 
@@ -602,45 +630,46 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 
 .action-tag {
   display: inline-block;
-  background: #fff;
-  color: #14532d;
-  border: 1px solid #86efac;
-  border-radius: 0.25rem;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .view-report-btn {
-  background: #fff;
-  color: #166534;
-  border: 1px solid #86efac;
-  border-radius: 0.375rem;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   padding: 0.375rem 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast);
 }
 
 .view-report-btn:hover {
-  background: #f0fdf4;
-  border-color: #22c55e;
+  background: var(--border-subtle);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .complete-btn {
-  background: #10b981;
+  background: var(--color-success);
   color: #fff;
   border: none;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-md);
   padding: 0.375rem 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: opacity var(--duration-fast);
 }
 
 .complete-btn:hover:not(:disabled) {
-  background: #059669;
+  opacity: 0.9;
 }
 
 .complete-btn:disabled {
@@ -648,25 +677,128 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
   cursor: not-allowed;
 }
 
+.summary-actions {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Action Panel */
+.action-panel {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.action-panel-title {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.action-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.75rem;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.action-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.action-btn.primary {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.action-btn.primary:hover {
+  opacity: 0.9;
+  transform: none;
+}
+
+.modify-input-panel {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+}
+
+.modify-input-panel textarea {
+  width: 100%;
+  resize: none;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.625rem;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  line-height: 1.6;
+  font-family: inherit;
+}
+
+.modify-input-panel textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.modify-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Report section */
+.report-section {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.report-content {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 /* Completion review panel */
 .completion-review {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.75rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   padding: 1.25rem;
   margin-top: 1rem;
   max-width: 480px;
   align-self: flex-start;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .review-header {
   font-weight: 600;
-  font-size: 1rem;
-  color: #0f172a;
+  font-size: var(--text-md);
+  color: var(--text-primary);
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .review-body {
@@ -676,8 +808,8 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 }
 
 .review-label {
-  font-size: 0.875rem;
-  color: #475569;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
   margin-bottom: 0.375rem;
 }
 
@@ -690,24 +822,24 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 
 .review-tag {
   display: inline-block;
-  background: #f1f5f9;
-  color: #334155;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.25rem;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .review-no-actions {
-  font-size: 0.875rem;
-  color: #94a3b8;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .review-prompt {
-  font-size: 0.9375rem;
+  font-size: var(--text-md);
   font-weight: 500;
-  color: #0f172a;
+  color: var(--text-primary);
   margin-top: 0.5rem;
 }
 
@@ -718,15 +850,15 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 }
 
 .save-skill-btn {
-  background: #0f172a;
+  background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity var(--duration-fast);
 }
 
 .save-skill-btn:hover {
@@ -734,37 +866,20 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 }
 
 .skip-save-btn {
-  background: #fff;
-  color: #64748b;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
   padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast);
 }
 
 .skip-save-btn:hover {
-  background: #f8fafc;
-  border-color: #94a3b8;
-}
-
-/* Report section in summary card */
-.report-section {
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #86efac;
-}
-
-.report-content {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  max-height: 400px;
-  overflow-y: auto;
+  background: var(--bg-elevated);
+  border-color: var(--text-secondary);
 }
 </style>
 
@@ -778,18 +893,18 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 }
 
 .markdown-body pre {
-  background: #f1f5f9;
+  background: var(--bg-elevated);
   padding: 0.75rem;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-md);
   overflow-x: auto;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }
 
 .markdown-body code {
-  background: #f1f5f9;
+  background: var(--bg-elevated);
   padding: 0.125rem 0.25rem;
-  border-radius: 0.25rem;
-  font-size: 0.8125rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
 }
 
 .markdown-body pre code {
@@ -809,24 +924,25 @@ function formatActionLabel(action: { action_type: string; tool_name: string; des
 .markdown-body h4 {
   margin: 0.75rem 0 0.5rem;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .markdown-body table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   margin: 0.5rem 0;
 }
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-subtle);
   padding: 0.375rem 0.5rem;
   text-align: left;
 }
 
 .markdown-body th {
-  background: #f1f5f9;
+  background: var(--bg-elevated);
   font-weight: 600;
 }
 </style>
