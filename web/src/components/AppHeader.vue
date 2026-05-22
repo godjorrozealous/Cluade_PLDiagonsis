@@ -5,11 +5,12 @@ import { useSessionStore } from '@/stores/sessionStore'
 const store = useSessionStore()
 
 const statusColor = computed(() => {
-  const status = store.activeSession?.status
-  if (status === 'diagnosing') return '#3b82f6'
-  if (status === 'modifying') return '#f59e0b'
-  if (status === 'completed') return '#10b981'
-  return '#64748b'
+  const map: Record<string, string> = {
+    diagnosing: 'var(--status-diagnosing)',
+    modifying: 'var(--status-modifying)',
+    completed: 'var(--status-completed)',
+  }
+  return map[store.activeSession?.status || ''] || 'var(--status-pending)'
 })
 
 const isBreathing = computed(() => {
@@ -21,7 +22,7 @@ const isBreathing = computed(() => {
 <template>
   <header class="app-header">
     <div class="header-brand">
-      <span class="header-icon" :style="{ animation: 'pulse-glow 3s ease-in-out infinite' }">&#9889;</span>
+      <span class="header-icon">&#9889;</span>
       <div>
         <div class="header-title">输电线路故障综合诊断智能体</div>
         <div class="header-subtitle">Power Line Fault Comprehensive Diagnosis Agent</div>
@@ -75,6 +76,7 @@ const isBreathing = computed(() => {
 
 .header-icon {
   font-size: 1.25rem;
+  animation: pulse-glow 3s ease-in-out infinite;
 }
 
 .header-title {
