@@ -2,6 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DiagnosisSession, ChatMessage, DiagnosisSummary } from '@/types'
 import { getSessions, getSession, switchSession, completeSession, getSkillSummary, clearSessions } from '@/api/http'
+import {
+  getTemplates,
+  activateTemplate,
+  deleteTemplate,
+  uploadTemplate,
+} from '@/api/http'
 import { sendMessage } from '@/api/sse'
 
 export const useSessionStore = defineStore('session', () => {
@@ -10,6 +16,8 @@ export const useSessionStore = defineStore('session', () => {
   const messages = ref<ChatMessage[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const templates = ref<import('@/api/http').TemplateInfo[]>([])
+  const activeTemplate = ref<string | null>(null)
 
   const activeSession = computed(() =>
     sessions.value.find((s) => s.session_id === activeSessionId.value) ?? null
@@ -254,6 +262,62 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function loadTemplates() {
+    try {
+      error.value = null
+      const data = await getTemplates()
+      templates.value = data.templates
+      const active = data.templates.find((t) => t.is_active)
+      if (active) {
+        activeTemplate.value = active.name
+      }
+    } catch (err) {
+      error.value = (err as Error).message
+    }
+  }
+
+  async function setActiveTemplate(name: string) {
+    try {
+      error.value = null
+      const data = await activateTemplate(name)
+      if (data.success) {
+        activeTemplate.value = name
+        await loadTemplates()
+      }
+    } catch (err) {
+      error.value = (err as Error).message
+    }
+  }
+
+  async function removeTemplate(name: string) {
+    try {
+      error.value = null
+      const data = await deleteTemplate(name)
+      if (data.success) {
+        templates.value = templates.value.filter((t) => t.name !== name)
+        if (activeTemplate.value === name) {
+          activeTemplate.value = null
+        }
+      }
+    } catch (err) {
+      error.value = (err as Error).message
+    }
+  }
+
+  async function addTemplate(file: File) {
+    try {
+      error.value = null
+      const data = await uploadTemplate(file)
+      if (data.success) {
+        await loadTemplates()
+      }
+      return data
+    } catch (err) {
+      error.value = (err as Error).message
+      throw err
+    }
+  }
+
   return {
     sessions,
     activeSessionId,
@@ -261,6 +325,8 @@ export const useSessionStore = defineStore('session', () => {
     messages,
     isLoading,
     error,
+    templates,
+    activeTemplate,
     loadSessions,
     selectSession,
     postMessage,
@@ -268,5 +334,9 @@ export const useSessionStore = defineStore('session', () => {
     clearAllSessions,
     markSessionComplete,
     fetchSkillSummary,
+    loadTemplates,
+    setActiveTemplate,
+    removeTemplate,
+    addTemplate,
   }
 })

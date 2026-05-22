@@ -150,3 +150,51 @@ export function updateWeights(weights: Record<string, number>) {
     }
   )
 }
+
+// ------------------------------------------------------------------
+// Template APIs
+// ------------------------------------------------------------------
+
+export interface TemplateInfo {
+  name: string
+  source_format: string
+  parsed: boolean
+  parsed_at: string | null
+  is_active: boolean
+}
+
+export function getTemplates() {
+  return request<{ templates: TemplateInfo[] }>('/api/templates')
+}
+
+export function uploadTemplate(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return fetch('/api/templates/upload', {
+    method: 'POST',
+    body: formData,
+  }).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || `HTTP ${res.status}`)
+    }
+    return res.json() as Promise<{ success: boolean; template: { name: string; source_format: string; parsed: boolean } }>
+  })
+}
+
+export function activateTemplate(name: string) {
+  return request<{ success: boolean; active_template: string }>('/api/templates/activate', {
+    method: 'POST',
+    body: JSON.stringify({ template_name: name }),
+  })
+}
+
+export function deleteTemplate(name: string) {
+  return request<{ success: boolean; message: string }>(`/api/templates/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  })
+}
+
+export function getTemplateParsed(name: string) {
+  return request<{ name: string; content: string }>(`/api/templates/${encodeURIComponent(name)}/parsed`)
+}
