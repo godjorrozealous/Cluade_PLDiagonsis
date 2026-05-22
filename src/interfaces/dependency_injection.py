@@ -23,6 +23,7 @@ from src.domain.prompt_builder import PromptBuilder
 from src.domain.diagnosis_planner import DiagnosisPlanner
 from src.domain.tool_executor import ToolExecutor
 from src.domain.report_composer import ReportComposer
+from src.domain.template_registry import TemplateRegistry
 
 
 class Container:
@@ -46,6 +47,7 @@ class Container:
         self.prompt_builder = PromptBuilder()
         self.diagnosis_planner = DiagnosisPlanner(self.llm_service)
         self.tool_executor = ToolExecutor(self.tool_registry)
+        self.template_registry = TemplateRegistry()
         self.report_composer = ReportComposer(self.llm_service)
 
     def _merge_yaml_config(self) -> None:

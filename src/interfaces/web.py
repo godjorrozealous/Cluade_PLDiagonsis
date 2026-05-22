@@ -26,6 +26,7 @@ from src.application.commands.complete_diagnosis import CompleteDiagnosisCommand
 from src.application.context import ContextBuilder
 from src.interfaces.dependency_injection import get_container
 from src.infrastructure.fault_parser import FaultContextParser
+from src.domain.template_registry import TemplateRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -415,6 +416,82 @@ def create_app() -> Flask:
             )
         except Exception as e:
             return jsonify({"error": str(e)}), 404
+
+    # ------------------------------------------------------------------
+    # 模板管理 API
+    # ------------------------------------------------------------------
+    @app.route("/api/templates", methods=["GET"])
+    def list_templates():
+        """获取模板列表"""
+        registry = container.template_registry
+        return jsonify({"templates": registry.list_templates()})
+
+    @app.route("/api/templates/upload", methods=["POST"])
+    def upload_template():
+        """上传模板文件"""
+        if "file" not in request.files:
+            return jsonify({"error": "缺少文件"}), 400
+
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"error": "文件名为空"}), 400
+
+        allowed = {".md", ".docx", ".pdf"}
+        ext = Path(file.filename).suffix.lower()
+        if ext not in allowed:
+            return jsonify({"error": f"不支持的格式: {ext}"}), 400
+
+        try:
+            temp_path = Path("/tmp") / file.filename
+            file.save(temp_path)
+
+            registry = container.template_registry
+            result = registry.upload(temp_path, file.filename)
+            temp_path.unlink(missing_ok=True)
+
+            return jsonify({"success": True, "template": result})
+        except Exception as e:
+            logger.error(f"上传模板失败: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/templates/activate", methods=["POST"])
+    def activate_template():
+        """激活指定模板"""
+        data = request.json or {}
+        name = data.get("template_name", "").strip()
+
+        if not name:
+            return jsonify({"error": "模板名称不能为空"}), 400
+
+        registry = container.template_registry
+        success = registry.activate(name)
+        if not success:
+            return jsonify({"error": f"模板 '{name}' 不存在或解析失败"}), 404
+
+        # 更新当前会话
+        session = container.session_manager.get_active()
+        if session:
+            session.active_template_name = name
+            container.session_manager._persist()
+
+        return jsonify({"success": True, "active_template": name})
+
+    @app.route("/api/templates/<name>", methods=["DELETE"])
+    def delete_template(name: str):
+        """删除模板"""
+        registry = container.template_registry
+        if registry.delete(name):
+            return jsonify({"success": True, "message": f"模板 '{name}' 已删除"})
+        return jsonify({"error": f"模板 '{name}' 不存在"}), 404
+
+    @app.route("/api/templates/<name>/parsed", methods=["GET"])
+    def get_template_parsed(name: str):
+        """获取解析后的模板内容"""
+        registry = container.template_registry
+        content = registry.get_parsed_content(name)
+        if content is None:
+            return jsonify({"error": f"模板 '{name}' 未解析"}), 404
+        return jsonify({"name": name, "content": content})
 
     @app.route("/api/health", methods=["GET"])
     def health():
