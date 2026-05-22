@@ -38,7 +38,7 @@ onMounted(() => {
   <section class="tool-panel">
     <header class="tool-header">
       <h3>诊断工具</h3>
-      <button class="refresh-btn" @click="loadTools" title="刷新">&#x21bb;</button>
+      <button type="button" class="refresh-btn" @click="loadTools" title="刷新">&#x21bb;</button>
     </header>
 
     <ul v-if="tools.length > 0" class="tool-list">
@@ -61,8 +61,8 @@ onMounted(() => {
 .tool-panel {
   width: 260px;
   min-width: 260px;
-  background: #fff;
-  border-left: 1px solid #e2e8f0;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
 }
@@ -72,20 +72,20 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .tool-header h3 {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .refresh-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 1.1rem;
   cursor: pointer;
   padding: 0.25rem;
@@ -93,7 +93,7 @@ onMounted(() => {
 }
 
 .refresh-btn:hover {
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .tool-list {
@@ -106,8 +106,8 @@ onMounted(() => {
 
 .tool-item {
   padding: 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   margin-bottom: 0.5rem;
 }
 
@@ -120,23 +120,23 @@ onMounted(() => {
 
 .tool-name {
   font-weight: 500;
-  font-size: 0.875rem;
-  color: #0f172a;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
 }
 
 .tool-category {
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   padding: 0.15rem 0.4rem;
   border-radius: 9999px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .tool-desc {
-  font-size: 0.75rem;
-  color: #64748b;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   margin-top: 0.25rem;
   line-height: 1.4;
 }
@@ -148,11 +148,11 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  font-size: 0.875rem;
-  color: #94a3b8;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .tool-error {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 </style>

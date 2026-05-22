@@ -80,8 +80,8 @@ onUnmounted(() => {
     <header class="skill-header">
       <h3>技能管理</h3>
       <div class="skill-actions">
-        <button class="icon-btn" @click="loadSkills" title="刷新">&#x21bb;</button>
-        <button class="icon-btn" @click="handleReset" title="重置为默认">&#x21ba;</button>
+        <button type="button" class="icon-btn" @click="loadSkills" title="刷新">&#x21bb;</button>
+        <button type="button" class="icon-btn" @click="handleReset" title="重置为默认">&#x21ba;</button>
       </div>
     </header>
 
@@ -101,6 +101,7 @@ onUnmounted(() => {
         </div>
         <div class="skill-actions">
           <button
+            type="button"
             class="activate-btn"
             :class="{ activated: defaultSkill === s.name }"
             @click="handleActivate(s.name)"
@@ -109,6 +110,7 @@ onUnmounted(() => {
           </button>
           <button
             v-if="!s.is_default"
+            type="button"
             class="delete-btn"
             @click="handleDelete(s)"
             title="删除"
@@ -130,8 +132,8 @@ onUnmounted(() => {
 .skill-panel {
   width: 280px;
   min-width: 280px;
-  background: #fff;
-  border-left: 1px solid #e2e8f0;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
 }
@@ -141,14 +143,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .skill-header h3 {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .skill-actions {
@@ -159,7 +161,7 @@ onUnmounted(() => {
 .icon-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 1.1rem;
   cursor: pointer;
   padding: 0.25rem;
@@ -167,7 +169,7 @@ onUnmounted(() => {
 }
 
 .icon-btn:hover {
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .skill-list {
@@ -184,74 +186,74 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   margin-bottom: 0.5rem;
   transition: border-color 0.15s;
 }
 
 .skill-item.active {
-  border-color: #0f172a;
-  background: #f8fafc;
+  border-color: var(--color-success);
+  background: rgba(16, 185, 129, 0.03);
 }
 
 .skill-name {
   font-weight: 500;
-  font-size: 0.875rem;
-  color: #0f172a;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
 .source-tag {
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   padding: 0.1rem 0.375rem;
-  border-radius: 0.25rem;
-  background: #e0f2fe;
-  color: #0369a1;
+  border-radius: var(--radius-sm);
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-primary);
 }
 
 .source-tag.source-default {
-  background: #f1f5f9;
-  color: #64748b;
+  background: rgba(100, 116, 139, 0.12);
+  color: var(--text-muted);
 }
 
 .skill-desc {
-  font-size: 0.75rem;
-  color: #64748b;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   margin-top: 0.25rem;
   line-height: 1.4;
 }
 
 .activate-btn {
   flex-shrink: 0;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
   border: none;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-sm);
   padding: 0.375rem 0.625rem;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .activate-btn:hover {
-  background: #e2e8f0;
+  background: var(--bg-input);
 }
 
 .activate-btn.activated {
-  background: #0f172a;
-  color: #fff;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--color-success);
 }
 
 .delete-btn {
   flex-shrink: 0;
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 1rem;
   cursor: pointer;
   padding: 0.25rem;
@@ -259,7 +261,7 @@ onUnmounted(() => {
 }
 
 .delete-btn:hover {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .skill-empty,
@@ -270,18 +272,18 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  font-size: 0.875rem;
-  color: #94a3b8;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .skill-error {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .hint {
-  font-size: 0.75rem;
-  color: #cbd5e1;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   margin-top: 0.5rem;
 }
 </style>
