@@ -365,6 +365,18 @@ async def test_save_strategy_invalid_state(save_strategy_command: SaveSkillComma
         [e async for e in save_strategy_command.execute(ctx)]
 
 
+@pytest.mark.asyncio
+async def test_save_skill_llm_failure(save_strategy_command: SaveSkillCommand) -> None:
+    """save_skill yields error when LLM fails."""
+    save_strategy_command.llm.chat.side_effect = Exception("LLM error")
+    session = DiagnosisSession(session_id="s1", line_name="京西线", status=SessionStatus.MODIFYING)
+    ctx = _make_context(session)
+
+    events = [e async for e in save_strategy_command.execute(ctx)]
+
+    assert any(e.event_type == EventType.ERROR for e in events)
+
+
 # ============================================================================
 # DiagnoseCommand
 # ============================================================================

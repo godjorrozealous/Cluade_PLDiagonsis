@@ -59,10 +59,15 @@ class SaveSkillCommand(Command):
 
         # 使用 LLM 生成符合 Agent Skill 规范的 Markdown
         prompt = self._build_generation_prompt(skill_config)
-        skill_md = await self.llm.chat([
-            {"role": "system", "content": "你是 Skill 生成专家。将诊断配置转换为符合 Agent Skill 规范的 Markdown Skill 文件。"},
-            {"role": "user", "content": prompt},
-        ])
+        try:
+            skill_md = await self.llm.chat([
+                {"role": "system", "content": "你是 Skill 生成专家。将诊断配置转换为符合 Agent Skill 规范的 Markdown Skill 文件。"},
+                {"role": "user", "content": prompt},
+            ])
+        except Exception as e:
+            logger.error(f"LLM 生成技能失败: {e}")
+            yield Event.error(session.session_id, f"技能生成失败: {e}")
+            return
 
         file_path = self._save_to_file(skill_name, skill_md)
 
@@ -133,7 +138,7 @@ class SaveSkillCommand(Command):
             elif a["type"] == "adjust_weight":
                 action_lines.append(f"- 调整 {params.get('tool_name', '')} 权重为 {params.get('weight', '')}")
             elif a["type"] == "modify_report":
-                action_lines.append(f"- 修改报告：{params.get('instruction', '')}")
+                action_lines.append(f"- 修改报告：{params.get('description', '')}")
             elif a["type"] == "complete":
                 action_lines.append("- 完成诊断")
 
@@ -171,7 +176,11 @@ class SaveSkillCommand(Command):
 
     def _save_to_file(self, name: str, content: str) -> Path:
         file_path = self.skills_dir / f"{name}.md"
-        file_path.write_text(content, encoding="utf-8")
+        try:
+            file_path.write_text(content, encoding="utf-8")
+        except OSError as e:
+            logger.error(f"写入技能文件失败: {e}")
+            raise InvalidStateError(f"无法保存技能文件: {e}") from e
         if hasattr(self.skill_loader, '_cache'):
             self.skill_loader._cache[name] = content
         return file_path
