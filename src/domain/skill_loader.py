@@ -1,7 +1,7 @@
 """技能加载器
 
 提供 Markdown 格式技能文件的加载、列表、保存和删除功能。
-支持内存缓存，并在文件缺失时提供默认回退内容。
+支持 YAML frontmatter 解析、内存缓存、references 引用加载。
 """
 
 import logging
@@ -30,11 +30,14 @@ DEFAULT_SKILL_CONTENT = """# 默认技能
 - 每个技能应包含描述、参数说明和示例
 """
 
+FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
 
 class SkillLoader:
     """技能加载器
 
-    负责管理 Markdown 技能文件的 CRUD 操作，并维护内存缓存以提高读取性能。
+    负责管理 Markdown 技能文件的 CRUD 操作，支持 YAML frontmatter 解析，
+    并维护内存缓存以提高读取性能。
     """
 
     def __init__(self, skills_dir: str = "skills") -> None:
@@ -45,6 +48,7 @@ class SkillLoader:
         """
         self._skills_dir = Path(skills_dir)
         self._cache: Dict[str, str] = {}
+        self._metadata_cache: Dict[str, dict] = {}
 
     def load(self, skill_name: str) -> tuple[str, dict]:
         """加载指定技能文件的内容和权重配置。
@@ -72,6 +76,38 @@ class SkillLoader:
         self._cache[skill_name] = content
         logger.info(f"已加载技能: {skill_name}")
         return content, self._extract_weights(content)
+
+    def extract_metadata(self, skill_name: str) -> dict:
+        """提取技能的 YAML frontmatter 元数据。
+
+        Args:
+            skill_name: 技能名称。
+
+        Returns:
+            frontmatter 解析后的字典（无 frontmatter 返回空字典）。
+        """
+        if skill_name in self._metadata_cache:
+            return self._metadata_cache[skill_name]
+
+        skill_path = self._skills_dir / f"{skill_name}.md"
+        if not skill_path.exists():
+            return {}
+
+        content = skill_path.read_text(encoding="utf-8")
+        metadata = self._parse_frontmatter(content)
+        self._metadata_cache[skill_name] = metadata
+        return metadata
+
+    def _parse_frontmatter(self, content: str) -> dict:
+        """解析 Markdown 内容中的 YAML frontmatter。"""
+        match = FRONTMATTER_PATTERN.match(content)
+        if not match:
+            return {}
+        try:
+            return yaml.safe_load(match.group(1)) or {}
+        except yaml.YAMLError as e:
+            logger.warning(f"YAML frontmatter 解析失败: {e}")
+            return {}
 
     def _extract_weights(self, content: str) -> dict[str, float]:
         """从 Markdown 内容中提取 YAML 代码块里的 weights 配置。"""
@@ -103,6 +139,23 @@ class SkillLoader:
         logger.debug(f"发现 {len(skills)} 个技能")
         return skills
 
+    def load_references(self) -> Dict[str, str]:
+        """加载 references 目录下的所有引用文件。
+
+        Returns:
+            文件名到内容的映射字典。
+        """
+        refs_dir = self._skills_dir / "references"
+        if not refs_dir.exists():
+            return {}
+
+        refs = {}
+        for p in refs_dir.glob("*.md"):
+            if p.is_file():
+                refs[p.name] = p.read_text(encoding="utf-8")
+                logger.debug(f"已加载引用: {p.name}")
+        return refs
+
     def save(self, skill_name: str, content: str) -> Path:
         """保存技能文件内容。
 
@@ -119,6 +172,8 @@ class SkillLoader:
         skill_path = self._skills_dir / f"{skill_name}.md"
         skill_path.write_text(content, encoding="utf-8")
         self._cache[skill_name] = content
+        # 清除元数据缓存，下次重新解析
+        self._metadata_cache.pop(skill_name, None)
         logger.info(f"已保存技能: {skill_name}")
         return skill_path
 
@@ -140,5 +195,6 @@ class SkillLoader:
 
         skill_path.unlink()
         self._cache.pop(skill_name, None)
+        self._metadata_cache.pop(skill_name, None)
         logger.info(f"已删除技能: {skill_name}")
         return True

@@ -102,3 +102,42 @@ def test_list_skills(tmp_path) -> None:
     result = loader.list_skills()
 
     assert result == ["alpha_skill", "beta_skill", "gamma_skill"]
+
+
+class TestSkillLoaderMetadata:
+    def test_extract_frontmatter_metadata(self, tmp_path):
+        """能提取 YAML frontmatter 中的 name 和 description"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_file = skills_dir / "meta_test.md"
+        skill_file.write_text("""---
+name: meta_test
+description: |
+  这是描述内容。
+  多行描述也应该被保留。
+---
+
+# 正文
+
+一些内容。
+""")
+        loader = SkillLoader(str(skills_dir))
+        content, weights = loader.load("meta_test")
+        metadata = loader.extract_metadata("meta_test")
+
+        assert metadata["name"] == "meta_test"
+        assert "这是描述内容" in metadata["description"]
+        assert "多行描述也应该被保留" in metadata["description"]
+
+    def test_load_references(self, tmp_path):
+        """能加载 references 目录下的引用文件"""
+        skills_dir = tmp_path / "skills"
+        refs_dir = skills_dir / "references"
+        refs_dir.mkdir(parents=True)
+        (refs_dir / "rules.md").write_text("# 规则\n\n测试规则。\n")
+
+        loader = SkillLoader(str(skills_dir))
+        refs = loader.load_references()
+
+        assert "rules.md" in refs
+        assert "测试规则" in refs["rules.md"]
