@@ -48,6 +48,7 @@ STATE_COMMAND_PERMISSIONS: Dict[SessionStatus, List[str]] = {
     SessionStatus.DIAGNOSING: ["exclude", "recheck"],
     SessionStatus.MODIFYING: [
         "modify",
+        "modify_report",
         "exclude",
         "recheck",
         "adjust_weight",
@@ -56,7 +57,7 @@ STATE_COMMAND_PERMISSIONS: Dict[SessionStatus, List[str]] = {
         "diagnose",
         "include",
     ],
-    SessionStatus.COMPLETED: ["recheck", "modify", "save_strategy"],
+    SessionStatus.COMPLETED: ["recheck", "modify", "modify_report", "save_strategy"],
     SessionStatus.EXCLUDED: ["modify", "recheck", "adjust_weight", "diagnose", "include"],
     SessionStatus.RECHECKING: ["modify", "exclude", "adjust_weight"],
 }

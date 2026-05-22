@@ -1,6 +1,7 @@
 """修改报告 Command"""
 
 import logging
+from pathlib import Path
 from typing import AsyncIterator
 
 from src.core.models import Event, ExecutionContext, SessionStatus, UserAction
@@ -55,7 +56,6 @@ class ModifyReportCommand(Command):
         # 加载当前激活模板作为约束
         template_md = ""
         if session.active_template_name:
-            from pathlib import Path
             parsed_path = Path("templates/parsed") / f"{session.active_template_name}.md"
             if parsed_path.exists():
                 template_md = parsed_path.read_text(encoding="utf-8")
@@ -104,6 +104,7 @@ class ModifyReportCommand(Command):
         )
 
         session.latest_report = modified_report
+        self.session_manager.transition(session.session_id, SessionStatus.MODIFYING)
         self.session_manager._persist()
 
         logger.info(
