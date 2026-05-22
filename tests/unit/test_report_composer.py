@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.core.models import ChapterConfig, RenderMode, TemplateConfig, ToolOutput
+from src.core.models import ChapterConfig, FaultContext, RenderMode, TemplateConfig, ToolOutput
 from src.domain.report_composer import DEFAULT_CHAPTERS, ReportComposer
 
 
@@ -122,3 +122,28 @@ async def test_compose_without_template_uses_defaults(
 
     # 验证返回结果
     assert "# 输电线路故障诊断报告" in result["report"]
+
+
+class TestReportComposer:
+    @pytest.fixture
+    def composer(self):
+        mock_llm = AsyncMock()
+        return ReportComposer(mock_llm)
+
+    @pytest.mark.asyncio
+    async def test_compose_without_weights(self, composer):
+        """ReportComposer 不再计算加权结果，summary 中不含 weighted_scores"""
+        tool_outputs = {
+            "ToolA": ToolOutput(tool_name="ToolA", structured_data={"confidence": 0.8, "fault_type": "雷击"}),
+        }
+        composer.llm.chat.return_value = "# 诊断报告\n\n测试内容。"
+
+        result = await composer.compose(
+            tool_outputs, None, "s1",
+            fault_context=FaultContext(line_id="s1", line_name="京西线"),
+        )
+
+        # summary 中不应包含加权计算结果
+        assert "weighted_scores" not in result["summary"]
+        assert result["summary"]["fault_type"] == "雷击"
+        assert result["summary"]["confidence"] == 0.8

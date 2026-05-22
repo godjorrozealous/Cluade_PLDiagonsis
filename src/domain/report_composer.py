@@ -1,13 +1,15 @@
 """报告撰写器
 
 通过单次 LLM 调用生成完整的诊断报告。
+支持模板 Markdown 注入，由 LLM 自主按模板结构组织输出。
 """
 
 import json
 import logging
+from pathlib import Path
 from typing import Any, Dict, Optional
 
-from src.core.models import FaultContext, TemplateConfig, ToolOutput
+from src.core.models import FaultContext, ToolOutput
 from src.infrastructure.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
@@ -19,50 +21,44 @@ class ReportComposer:
     """报告撰写器
 
     基于工具输出和模板配置，通过单次 LLM 调用生成完整诊断报告。
+    纯 Skill 驱动：LLM 通过读取 Skill 自主计算加权置信度并排序。
     """
 
     def __init__(self, llm_service: LLMService):
-        """初始化报告撰写器。
-
-        Args:
-            llm_service: LLM 服务实例，用于生成报告内容。
-        """
         self.llm = llm_service
 
     async def compose(
         self,
         tool_outputs: Dict[str, ToolOutput],
-        template: Optional[TemplateConfig],
+        template: Optional[Any],  # 保留参数兼容，实际使用模板 Markdown
         session_id: str,
         fault_context: Optional[FaultContext] = None,
         action_log: Optional[list[dict]] = None,
         weights: Optional[Dict[str, float]] = None,
+        active_template_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """撰写完整诊断报告。
 
-        通过单次 LLM 调用生成包含所有章节的完整报告。
-
         Args:
-            tool_outputs: 各诊断工具的输出结果，键为工具名，值为 ToolOutput。
-            template: 报告模板配置，若为 None 则使用默认章节。
-            session_id: 当前会话 ID，用于日志追踪。
-            weights: 工具权重配置，用于加权计算诊断摘要。
+            tool_outputs: 各诊断工具的输出结果。
+            template: 模板配置（向后兼容，优先使用 active_template_name）。
+            session_id: 当前会话 ID。
+            fault_context: 故障上下文。
+            action_log: 用户操作历史。
+            weights: 工具权重配置（传递给 LLM 作为参考，不代码计算）。
+            active_template_name: 当前激活的模板名称。
 
         Returns:
             包含 summary 和 report 的字典。
-                - summary: 诊断摘要（故障类型、置信度、主工具）
-                - report: 格式化后的完整报告 Markdown 字符串。
         """
-        # 确定章节列表
-        if template and template.chapters:
-            chapters = [c.title for c in template.chapters]
-        else:
-            chapters = DEFAULT_CHAPTERS.copy()
+        # 加载模板 Markdown
+        template_md = self._load_template_md(active_template_name)
 
         # 构建提示词
-        prompt = self._build_prompt(tool_outputs, chapters, fault_context, action_log)
+        prompt = self._build_prompt(
+            tool_outputs, fault_context, action_log, weights, template_md
+        )
 
-        # 调用 LLM
         messages = [
             {"role": "system", "content": "你是输电线路故障诊断报告撰写专家。"},
             {"role": "user", "content": prompt},
@@ -74,9 +70,8 @@ class ReportComposer:
             logger.error(f"会话 {session_id} 报告生成失败: {e}")
             raise
 
-        # 格式化响应
         formatted = self._format_response(response)
-        summary = self._extract_summary(tool_outputs, weights)
+        summary = self._extract_summary(tool_outputs)
         if fault_context:
             summary["line_name"] = fault_context.line_name
             if fault_context.additional_info:
@@ -85,34 +80,41 @@ class ReportComposer:
                 summary["fault_time"] = fault_context.fault_time.isoformat()
         if action_log:
             summary["action_log"] = action_log
+
         return {"summary": summary, "report": formatted}
+
+    def _load_template_md(self, template_name: Optional[str]) -> str:
+        """加载激活模板的 Markdown 内容。"""
+        if not template_name:
+            return ""
+
+        parsed_path = Path("templates/parsed") / f"{template_name}.md"
+        if parsed_path.exists():
+            return parsed_path.read_text(encoding="utf-8")
+
+        # 回退：尝试直接读取 templates/ 下的 .md 文件
+        direct_path = Path("templates") / f"{template_name}.md"
+        if direct_path.exists():
+            return direct_path.read_text(encoding="utf-8")
+
+        logger.warning(f"模板文件不存在: {template_name}")
+        return ""
 
     def _build_prompt(
         self,
         tool_outputs: Dict[str, ToolOutput],
-        chapters: list[str],
-        fault_context: Optional[FaultContext] = None,
-        action_log: Optional[list[dict]] = None,
+        fault_context: Optional[FaultContext],
+        action_log: Optional[list[dict]],
+        weights: Optional[Dict[str, float]],
+        template_md: str,
     ) -> str:
-        """构建 LLM 提示词。
-
-        Args:
-            tool_outputs: 工具输出字典。
-            chapters: 报告章节标题列表。
-
-        Returns:
-            完整的提示词字符串。
-        """
         lines = [
             "请根据以下诊断工具输出，生成一份完整的输电线路故障诊断报告。",
             "",
         ]
 
         if fault_context:
-            lines.extend([
-                "## 诊断目标",
-                "",
-            ])
+            lines.extend(["## 诊断目标", ""])
             target_parts = []
             if fault_context.additional_info:
                 voltage = fault_context.additional_info.get("voltage_level")
@@ -120,18 +122,26 @@ class ReportComposer:
                     target_parts.append(f"电压等级：{voltage}")
             target_parts.append(f"线路名称：{fault_context.line_name}")
             if fault_context.fault_time:
-                target_parts.append(f"故障时间：{fault_context.fault_time.strftime('%Y-%m-%d %H:%M')}")
+                target_parts.append(
+                    f"故障时间：{fault_context.fault_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}"
+                )
             target_parts.append("故障类型：跳闸")
             lines.append(" | ".join(target_parts))
             lines.append("")
 
-        if action_log:
+        if weights:
             lines.extend([
-                "## 用户操作历史",
+                "## 工具权重配置",
                 "",
-                "本次诊断过程中用户执行了以下操作：",
+                "请在诊断结论中按以下权重计算加权置信度：",
                 "",
             ])
+            for tool_name, weight in weights.items():
+                lines.append(f"- {tool_name}: {weight}")
+            lines.append("")
+
+        if action_log:
+            lines.extend(["## 用户操作历史", ""])
             for action in action_log:
                 action_type = action.get("action_type", "")
                 tool_name = action.get("tool_name", "")
@@ -143,8 +153,8 @@ class ReportComposer:
                 elif action_type == "recheck":
                     lines.append(f"- 复查 {tool_name}")
                 elif action_type == "adjust_weight":
-                    weight = action.get("weight", "")
-                    lines.append(f"- 调整 {tool_name} 权重为 {weight}")
+                    w = action.get("weight", "")
+                    lines.append(f"- 调整 {tool_name} 权重为 {w}")
                 elif action_type == "modify_report":
                     lines.append(f"- 修改报告：{desc or tool_name}")
                 elif action_type == "complete":
@@ -153,11 +163,7 @@ class ReportComposer:
                     lines.append(f"- {action_type}: {desc or tool_name}")
             lines.append("")
 
-        lines.extend([
-            "## 诊断工具输出",
-            "",
-        ])
-
+        lines.extend(["## 诊断工具输出", ""])
         for tool_name, output in tool_outputs.items():
             lines.append(f"### {tool_name}")
             if output.raw_text:
@@ -170,52 +176,52 @@ class ReportComposer:
                 )
             lines.append("")
 
+        if template_md:
+            lines.extend([
+                "## 报告模板约束",
+                "",
+                "请严格按照以下模板章节结构组织报告：",
+                "",
+                template_md,
+                "",
+            ])
+        else:
+            lines.extend([
+                "## 报告要求",
+                "",
+                "请生成包含以下章节的完整报告：",
+                "",
+            ])
+            for chapter in DEFAULT_CHAPTERS:
+                lines.append(f"- {chapter}")
+            lines.append("")
+
         lines.extend([
-            "## 报告要求",
-            "",
-            "请生成包含以下章节的完整报告：",
-            "",
-        ])
-        for chapter in chapters:
-            lines.append(f"- {chapter}")
-        lines.extend([
-            "",
             "格式要求：",
             "1. 每个章节使用 `## 章节名` 作为标题",
             "2. 内容专业、逻辑清晰",
             "3. 基于提供的诊断数据进行分析",
             "4. 使用 Markdown 格式输出",
+            "5. 诊断结论中必须列出每个工具的加权置信度计算过程",
         ])
 
         return "\n".join(lines)
 
     def _format_response(self, response: str) -> str:
-        """格式化 LLM 响应。
-
-        确保报告以一级标题开头。
-
-        Args:
-            response: LLM 返回的原始字符串。
-
-        Returns:
-            格式化后的报告字符串。
-        """
         stripped = response.strip()
         if not stripped.startswith("# "):
             return f"# 输电线路故障诊断报告\n\n{stripped}"
         return stripped
 
     def _extract_summary(
-        self, tool_outputs: Dict[str, ToolOutput], weights: Optional[Dict[str, float]] = None
+        self, tool_outputs: Dict[str, ToolOutput]
     ) -> Dict[str, Any]:
-        """从工具输出中提取诊断摘要。
+        """提取诊断摘要（纯工具输出，不做加权计算）。
 
-        取置信度最高的工具结果作为 primary diagnosis。
-        若提供了 weights，则使用加权后的置信度进行比较。
+        加权计算由 LLM 通过 Skill 自主完成。
         """
         best_tool = None
-        best_weighted_confidence = 0.0
-        best_raw_confidence = 0.0
+        best_confidence = 0.0
         best_fault_type = "未知"
 
         for tool_name, output in tool_outputs.items():
@@ -225,17 +231,13 @@ class ReportComposer:
             if not isinstance(confidence, (int, float)):
                 continue
 
-            weight = weights.get(tool_name, 1.0) if weights else 1.0
-            weighted_confidence = confidence * weight
-
-            if weighted_confidence > best_weighted_confidence:
-                best_weighted_confidence = weighted_confidence
-                best_raw_confidence = confidence
+            if confidence > best_confidence:
+                best_confidence = confidence
                 best_fault_type = fault_type
                 best_tool = tool_name
 
         return {
             "fault_type": best_fault_type,
-            "confidence": round(best_raw_confidence, 2),
+            "confidence": round(best_confidence, 2),
             "primary_tool": best_tool or "unknown",
         }
