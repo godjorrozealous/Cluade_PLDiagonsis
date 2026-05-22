@@ -199,6 +199,7 @@ class DiagnoseCommand(Command):
         composed = await self.report_composer.compose(
             tool_outputs, None, session.session_id, fault_context, action_log_data,
             weights=session.active_weights,
+            active_template_name=session.active_template_name,
         )
         report = composed["report"]
         summary = composed["summary"]
