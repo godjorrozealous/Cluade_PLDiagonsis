@@ -1,17 +1,19 @@
 """保存技能 Command
 
-将当前会话的调整保存为符合 Agent Skill 规范的 Markdown 文件，
-使用 LLM 生成完整的 Skill 内容（YAML frontmatter + pushy description + 完整规则）。
+将当前会话的调整保存为符合 Agent Skill 规范的 Markdown 文件。
+采用代码层直接构建（非 LLM 生成），基于 comprehensive_diagnosis.md 基线全文，
+确保输出的 Skill 完全自包含，LLM 读取一个文件即可完整执行诊断流程。
 """
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import AsyncIterator
 
 import yaml
 
-from src.core.models import DiagnosisSession, Event, ExecutionContext, SessionStatus
+from src.core.models import DiagnosisSession, Event, ExecutionContext
 from src.core.exceptions import InvalidStateError
 from src.application.commands.base import Command
 from src.domain.session_manager import SessionManager
@@ -22,10 +24,20 @@ from src.infrastructure.llm_service import LLMService
 logger = logging.getLogger(__name__)
 
 DEFAULT_SKILLS_DIR = Path("skills")
+BASE_SKILL_NAME = "comprehensive_diagnosis"
+FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 
 class SaveSkillCommand(Command):
-    """保存技能 Command"""
+    """保存技能 Command
+
+    代码层直接构建 Skill Markdown，确定性输出：
+    1. 读取 comprehensive_diagnosis.md 基线正文
+    2. 构建 YAML frontmatter（含 pushy description）
+    3. 在工具策略表中标记排除工具为 SKIP
+    4. 更新 weights YAML 代码块（如用户有调整）
+    5. 追加个性化报告规则
+    """
 
     def __init__(
         self,
@@ -57,17 +69,8 @@ class SaveSkillCommand(Command):
         # 收集会话完整状态
         skill_config = self._build_skill_config(session, skill_name)
 
-        # 使用 LLM 生成符合 Agent Skill 规范的 Markdown
-        prompt = self._build_generation_prompt(skill_config)
-        try:
-            skill_md = await self.llm.chat([
-                {"role": "system", "content": "你是 Skill 生成专家。将诊断配置转换为符合 Agent Skill 规范的 Markdown Skill 文件。"},
-                {"role": "user", "content": prompt},
-            ])
-        except Exception as e:
-            logger.error(f"LLM 生成技能失败: {e}")
-            yield Event.error(session.session_id, f"技能生成失败: {e}")
-            return
+        # 代码层直接构建完整 Skill Markdown（不用 LLM）
+        skill_md = self._build_skill_markdown(skill_config)
 
         file_path = self._save_to_file(skill_name, skill_md)
 
@@ -110,12 +113,17 @@ class SaveSkillCommand(Command):
         excluded = session.excluded_tools.copy()
 
         action_summary = []
+        report_modifications = []
         for action in session.action_log:
             action_summary.append({
                 "type": action.action_type,
                 "params": action.parameters,
                 "time": action.timestamp.isoformat(),
             })
+            if action.action_type == "modify_report":
+                instruction = action.parameters.get("instruction", "")
+                if instruction:
+                    report_modifications.append(instruction)
 
         return {
             "name": name,
@@ -124,55 +132,144 @@ class SaveSkillCommand(Command):
             "excluded_tools": excluded,
             "template_name": session.active_template_name,
             "action_history": action_summary,
+            "report_modifications": report_modifications,
         }
 
-    def _build_generation_prompt(self, config: dict) -> str:
-        weights_yaml = yaml.dump({"weights": config["weights"]}, allow_unicode=True)
-        excluded_str = "\n".join(f"- {t}" for t in config["excluded_tools"]) or "无"
+    # ------------------------------------------------------------------
+    # 代码层直接构建 Skill Markdown
+    # ------------------------------------------------------------------
 
-        action_lines = []
-        for a in config["action_history"]:
-            params = a["params"]
-            if a["type"] == "exclude":
-                action_lines.append(f"- 排除 {params.get('tool_name', '')}")
-            elif a["type"] == "adjust_weight":
-                action_lines.append(f"- 调整 {params.get('tool_name', '')} 权重为 {params.get('weight', '')}")
-            elif a["type"] == "modify_report":
-                action_lines.append(f"- 修改报告：{params.get('description', '')}")
-            elif a["type"] == "complete":
-                action_lines.append("- 完成诊断")
+    def _build_skill_markdown(self, config: dict) -> str:
+        """代码层直接构建完整 Skill Markdown（确定性输出）。"""
+        frontmatter = self._build_frontmatter(config)
+        base_body = self._load_base_skill_body()
+        body = self._mark_excluded_tools(base_body, config["excluded_tools"])
+        body = self._update_weights(body, config["weights"])
+        personalized = self._build_personalized_section(config)
+        return f"{frontmatter}\n\n{body}\n\n{personalized}"
 
-        return f"""请根据以下诊断配置，生成一个符合 Agent Skill 规范的 Markdown 文件。
+    def _build_frontmatter(self, config: dict) -> str:
+        """构建 YAML frontmatter（pushy description）。"""
+        line = config["line_context"] or "transmission lines"
+        name = config["name"]
+        return f"""---
+name: {name}
+description: |
+  USE THIS SKILL when diagnosing power transmission line faults for {line}.
+  ALWAYS activate when the input contains line name "{line}" combined with
+  fault/trip/abnormal/flashover/ground/short-circuit keywords.
+  Applies to 220kV/500kV/750kV/1000kV transmission lines.
+  DO NOT use for distribution lines (below 110kV) or non-power-system diagnostics.
+---"""
 
-## 配置信息
+    def _load_base_skill_body(self) -> str:
+        """读取 comprehensive_diagnosis.md，去掉 frontmatter，返回正文。"""
+        base_path = self.skills_dir / f"{BASE_SKILL_NAME}.md"
+        if not base_path.exists():
+            logger.warning(f"基线技能文件不存在: {base_path}，返回空正文")
+            return ""
+        content = base_path.read_text(encoding="utf-8")
+        match = FRONTMATTER_PATTERN.match(content)
+        if match:
+            return content[match.end():].strip()
+        return content.strip()
 
-- 技能名称：{config['name']}
-- 线路上下文：{config['line_context']}
-- 激活模板：{config['template_name'] or '默认模板'}
+    def _mark_excluded_tools(self, body: str, excluded: list[str]) -> str:
+        """在工具调用策略表中标记排除的工具为 SKIP。"""
+        for tool in excluded:
+            # 匹配表格行：| LightningDiagnosisTool | 1.0 | Always call |
+            # 需要处理可能有 ** 加粗的情况
+            pattern = rf"(\|\s*\*?{re.escape(tool)}\*?\s*\|[^|]+\|)([^|]*)\|"
+            replacement = rf"\1 **SKIP — excluded by user preference** |"
+            body = re.sub(pattern, replacement, body)
+        return body
 
-### 工具权重配置
-```yaml
-{weights_yaml}
-```
+    def _update_weights(self, body: str, weights: dict[str, float]) -> str:
+        """更新正文中的 weights YAML 代码块。"""
+        if not weights:
+            return body
+        # 找到 ```yaml\nweights:...``` 代码块并替换
+        yaml_content = yaml.dump({"weights": weights}, allow_unicode=True).strip()
+        pattern = r"```yaml\s*\nweights:.*?```"
+        replacement = f"```yaml\n{yaml_content}\n```"
+        body = re.sub(pattern, replacement, body, flags=re.DOTALL)
+        return body
 
-### 排除的工具
-{excluded_str}
+    def _build_personalized_section(self, config: dict) -> str:
+        """构建个性化修改章节。"""
+        sections: list[str] = []
+        sections.append("# 基于本次诊断会话的个性化优化\n")
 
-### 用户操作历史
-{"\n".join(action_lines) or "无"}
+        # 排除工具
+        if config["excluded_tools"]:
+            sections.append("## 排除的工具\n")
+            for tool in config["excluded_tools"]:
+                sections.append(
+                    f"- **SKIP {tool} entirely** — do not include it in the diagnosis plan or report."
+                )
+            sections.append("")
 
-## 生成要求
+        # 权重调整
+        weight_changes = []
+        default_weights = self._load_default_weights()
+        for tool, weight in config["weights"].items():
+            default = default_weights.get(tool)
+            if default is not None and float(weight) != float(default):
+                weight_changes.append((tool, weight))
 
-1. YAML frontmatter 必须包含 name 和 description（description 要 pushy，明确触发条件）
-2. 必须包含"核心算法：加权置信度"章节，明确写出计算公式
-3. 工具调用策略表必须反映排除的工具（标记为"跳过"或说明条件）
-4. 诊断流程必须基于用户操作历史优化
-5. 注意事项中体现用户的偏好设置
-6. 末尾添加"历史优化记录"章节，说明本技能的来源
-7. 格式与 comprehensive_diagnosis.md 一致
+        if weight_changes:
+            sections.append("## 权重调整\n")
+            for tool, weight in weight_changes:
+                sections.append(
+                    f"- {tool}: use weight {weight} (override default {default_weights.get(tool, 'N/A')})"
+                )
+            sections.append("")
 
-请直接输出 Markdown 内容，不要添加代码块标记。
-"""
+        # 报告修改规则
+        report_rules = []
+        for action in config["action_history"]:
+            if action["type"] == "modify_report":
+                instruction = action["params"].get("instruction", "")
+                if instruction:
+                    report_rules.append(instruction)
+
+        if report_rules:
+            sections.append("## 报告撰写规则（必须遵循）\n")
+            sections.append(
+                "When composing the report, apply the following rules IN ADDITION to the standard template structure:"
+            )
+            for rule in report_rules:
+                sections.append(f"- **{rule}**")
+            sections.append("")
+
+        # 模板引用
+        if config["template_name"]:
+            sections.append("## 模板引用\n")
+            sections.append(
+                f"- Use template **{config['template_name']}** as the report structure guide."
+            )
+            sections.append("")
+
+        sections.append(
+            f"---\n\n*Generated from session on {config['line_context']}, {datetime.now().strftime('%Y-%m-%d')}*"
+        )
+        return "\n".join(sections)
+
+    def _load_default_weights(self) -> dict[str, float]:
+        """从基线 skill 加载默认权重。"""
+        base_path = self.skills_dir / f"{BASE_SKILL_NAME}.md"
+        if not base_path.exists():
+            return {}
+        content = base_path.read_text(encoding="utf-8")
+        match = re.search(r"```yaml\s*(.*?)```", content, re.DOTALL)
+        if match:
+            try:
+                config = yaml.safe_load(match.group(1))
+                if isinstance(config, dict):
+                    return config.get("weights", {})
+            except yaml.YAMLError:
+                pass
+        return {}
 
     def _save_to_file(self, name: str, content: str) -> Path:
         file_path = self.skills_dir / f"{name}.md"
@@ -181,6 +278,6 @@ class SaveSkillCommand(Command):
         except OSError as e:
             logger.error(f"写入技能文件失败: {e}")
             raise InvalidStateError(f"无法保存技能文件: {e}") from e
-        if hasattr(self.skill_loader, '_cache'):
+        if hasattr(self.skill_loader, "_cache"):
             self.skill_loader._cache[name] = content
         return file_path

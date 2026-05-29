@@ -200,6 +200,7 @@ class DiagnoseCommand(Command):
             tool_outputs, None, session.session_id, fault_context, action_log_data,
             weights=session.active_weights,
             active_template_name=session.active_template_name,
+            active_skill_name=session.active_skill_name,
         )
         report = composed["report"]
         summary = composed["summary"]

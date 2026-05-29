@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 from src.core.models import FaultContext, ToolOutput
 from src.infrastructure.llm_service import LLMService
+from src.domain.skill_loader import SkillLoader
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +25,9 @@ class ReportComposer:
     纯 Skill 驱动：LLM 通过读取 Skill 自主计算加权置信度并排序。
     """
 
-    def __init__(self, llm_service: LLMService):
+    def __init__(self, llm_service: LLMService, skill_loader: SkillLoader | None = None):
         self.llm = llm_service
+        self.skill_loader = skill_loader
 
     async def compose(
         self,
@@ -36,6 +38,7 @@ class ReportComposer:
         action_log: Optional[list[dict]] = None,
         weights: Optional[Dict[str, float]] = None,
         active_template_name: Optional[str] = None,
+        active_skill_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """撰写完整诊断报告。
 
@@ -47,6 +50,7 @@ class ReportComposer:
             action_log: 用户操作历史。
             weights: 工具权重配置（传递给 LLM 作为参考，不代码计算）。
             active_template_name: 当前激活的模板名称。
+            active_skill_name: 当前激活的技能名称（完整 skill 内容将加载到 prompt 中）。
 
         Returns:
             包含 summary 和 report 的字典。
@@ -54,9 +58,14 @@ class ReportComposer:
         # 加载模板 Markdown
         template_md = self._load_template_md(active_template_name)
 
+        # 加载完整 skill 内容（自包含指令，LLM 从中读取所有规则）
+        skill_md = ""
+        if self.skill_loader and active_skill_name:
+            skill_md, _ = self.skill_loader.load(active_skill_name)
+
         # 构建提示词
         prompt = self._build_prompt(
-            tool_outputs, fault_context, action_log, weights, template_md
+            tool_outputs, fault_context, action_log, weights, template_md, skill_md
         )
 
         messages = [
@@ -107,6 +116,7 @@ class ReportComposer:
         action_log: Optional[list[dict]],
         weights: Optional[Dict[str, float]],
         template_md: str,
+        skill_md: str = "",
     ) -> str:
         lines = [
             "请根据以下诊断工具输出，生成一份完整的输电线路故障诊断报告。",
@@ -195,6 +205,16 @@ class ReportComposer:
             for chapter in DEFAULT_CHAPTERS:
                 lines.append(f"- {chapter}")
             lines.append("")
+
+        if skill_md:
+            lines.extend([
+                "## 诊断技能指南（必须遵循）",
+                "",
+                "以下技能指南包含诊断策略和报告撰写规则。请仔细阅读并严格遵循其中的所有指令：",
+                "",
+                skill_md,
+                "",
+            ])
 
         lines.extend([
             "格式要求：",

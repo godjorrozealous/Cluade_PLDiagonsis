@@ -147,3 +147,49 @@ class TestReportComposer:
         assert "weighted_scores" not in result["summary"]
         assert result["summary"]["fault_type"] == "雷击"
         assert result["summary"]["confidence"] == 0.8
+
+    @pytest.mark.asyncio
+    async def test_compose_loads_full_skill_content(self, composer, tmp_path):
+        """compose() loads the complete skill markdown, not just a section."""
+        from src.domain.skill_loader import SkillLoader
+
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_loader = SkillLoader(str(skills_dir))
+        skill_content = """---
+name: test_skill
+description: test skill
+---
+
+# 诊断策略
+
+## 核心算法
+加权置信度 = confidence × weight
+
+## 工具调用策略
+| Tool | Condition |
+|------|-----------|
+| LightningDiagnosisTool | SKIP |
+
+## 报告撰写规则
+- Remove chapter 3 entirely
+- Follow template structure strictly
+"""
+        skill_loader.save("test_skill", skill_content)
+
+        composer.skill_loader = skill_loader
+        tool_outputs = {
+            "ToolA": ToolOutput(tool_name="ToolA", structured_data={"confidence": 0.8}),
+        }
+        composer.llm.chat.return_value = "# Report\n\nContent."
+
+        await composer.compose(
+            tool_outputs, None, "s1",
+            active_skill_name="test_skill",
+        )
+
+        prompt = composer.llm.chat.call_args.args[0][1]["content"]
+        assert "诊断技能指南（必须遵循）" in prompt
+        assert "LightningDiagnosisTool | SKIP" in prompt
+        assert "Remove chapter 3 entirely" in prompt
+        assert "核心算法" in prompt

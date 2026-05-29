@@ -1,5 +1,7 @@
 """Tests for src/domain/session_manager.py — CRUD, reuse, weights, tool exclusion."""
 
+from pathlib import Path
+
 import pytest
 
 from src.core.exceptions import SessionNotFoundError
@@ -12,6 +14,7 @@ from src.core.models import (
 )
 from src.domain.session_manager import SessionManager
 from src.domain.state_machine import StateMachine
+from src.domain.template_registry import TemplateRegistry
 from src.infrastructure.event_bus import EventBus
 
 
@@ -257,3 +260,75 @@ def test_add_rechecked_appends_once(session_manager: SessionManager) -> None:
     session_manager.add_rechecked(session.session_id, "ToolA")
     session_manager.add_rechecked(session.session_id, "ToolA")
     assert session.rechecked_tools == ["ToolA"]
+
+
+# ============================================================================
+# template inheritance
+# ============================================================================
+
+
+def test_create_inherits_active_template(session_manager: SessionManager) -> None:
+    """create() should inherit the globally activated template."""
+    from src.domain.template_registry import UPLOADS_DIR, PARSED_DIR
+
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    PARSED_DIR.mkdir(parents=True, exist_ok=True)
+    (UPLOADS_DIR / ".active").write_text("my_template", encoding="utf-8")
+    (PARSED_DIR / "my_template.md").write_text("# Test Template\n", encoding="utf-8")
+
+    try:
+        session = session_manager.create("京西线")
+        assert session.active_template_name == "my_template"
+    finally:
+        # Clean up
+        active_file = UPLOADS_DIR / ".active"
+        if active_file.exists():
+            active_file.unlink()
+        parsed_file = PARSED_DIR / "my_template.md"
+        if parsed_file.exists():
+            parsed_file.unlink()
+
+
+def test_create_auto_activates_first_parsed_template(session_manager: SessionManager) -> None:
+    """create() auto-activates the first parsed template when no .active file exists."""
+    from src.domain.template_registry import UPLOADS_DIR, PARSED_DIR
+
+    active_file = UPLOADS_DIR / ".active"
+    if active_file.exists():
+        active_file.unlink()
+
+    PARSED_DIR.mkdir(parents=True, exist_ok=True)
+    # 创建测试模板文件（000_ 前缀确保按字母排序排在第一位）
+    test_md = PARSED_DIR / "000_test_template.md"
+    test_md.write_text("# Test\n", encoding="utf-8")
+
+    try:
+        session = session_manager.create("京西线")
+        assert session.active_template_name == "000_test_template"
+    finally:
+        if test_md.exists():
+            test_md.unlink()
+
+
+def test_create_allows_no_active_template_when_no_parsed(session_manager: SessionManager) -> None:
+    """create() leaves active_template_name as None when no parsed templates exist."""
+    from src.domain.template_registry import UPLOADS_DIR, PARSED_DIR
+
+    active_file = UPLOADS_DIR / ".active"
+    if active_file.exists():
+        active_file.unlink()
+
+    # 临时移走所有解析模板，确保目录为空
+    moved: list[tuple[Path, Path]] = []
+    for p in list(PARSED_DIR.glob("*.md")):
+        dest = p.parent / f"{p.name}.tmpbak"
+        p.rename(dest)
+        moved.append((dest, p))
+
+    try:
+        session = session_manager.create("京西线")
+        assert session.active_template_name is None
+    finally:
+        for dest, orig in moved:
+            if dest.exists():
+                dest.rename(orig)

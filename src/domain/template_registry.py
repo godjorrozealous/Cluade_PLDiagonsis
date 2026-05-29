@@ -7,7 +7,7 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from src.infrastructure.template_parsers import (
     DocxTemplateParser,
@@ -34,6 +34,47 @@ class TemplateRegistry:
     def __init__(self):
         self._active_template: Optional[str] = None
         self._ensure_dirs()
+        self._load_active()
+        self._auto_activate_fallback()
+
+    def _load_active(self) -> None:
+        """从持久化文件加载激活状态。"""
+        active_file = UPLOADS_DIR / ".active"
+        if active_file.exists():
+            self._active_template = active_file.read_text(encoding="utf-8").strip() or None
+
+    def _save_active(self) -> None:
+        """将激活状态持久化到文件。"""
+        active_file = UPLOADS_DIR / ".active"
+        if self._active_template:
+            active_file.write_text(self._active_template, encoding="utf-8")
+        else:
+            active_file.unlink(missing_ok=True)
+
+    def _auto_activate_fallback(self) -> None:
+        """如果没有激活的模板，自动激活第一个已解析的模板。
+
+        规则：
+        - .active 文件存在且指向有效模板 → 保持现状
+        - .active 文件存在但指向无效模板 → 清空激活状态，不回退（用户曾手动选择过）
+        - .active 文件从未存在且无激活模板 → 自动激活第一个已解析模板
+        """
+        active_file = UPLOADS_DIR / ".active"
+        had_active_file = active_file.exists()
+
+        if self._active_template:
+            if not (PARSED_DIR / f"{self._active_template}.md").exists():
+                self._active_template = None
+                self._save_active()
+            return
+
+        if not self._active_template and not had_active_file:
+            for p in sorted(PARSED_DIR.iterdir()):
+                if p.is_file() and p.suffix == ".md" and not p.name.startswith("."):
+                    self._active_template = p.stem
+                    self._save_active()
+                    logger.info(f"自动激活默认模板: {p.stem}")
+                    break
 
     def _ensure_dirs(self) -> None:
         UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -45,7 +86,7 @@ class TemplateRegistry:
             return []
         templates = []
         for p in sorted(UPLOADS_DIR.iterdir()):
-            if not p.is_file():
+            if not p.is_file() or p.name.startswith("."):
                 continue
             parsed_path = PARSED_DIR / f"{p.stem}.md"
             templates.append({
@@ -111,6 +152,7 @@ class TemplateRegistry:
                 return False
 
         self._active_template = name
+        self._save_active()
         logger.info(f"模板已激活: {name}")
         return True
 
@@ -134,6 +176,7 @@ class TemplateRegistry:
 
         if self._active_template == name:
             self._active_template = None
+            self._save_active()
 
         return deleted
 

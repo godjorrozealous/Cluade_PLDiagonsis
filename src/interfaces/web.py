@@ -291,12 +291,20 @@ def create_app() -> Flask:
             session = container.session_manager.get(id)
             container.state_machine.transition(session, SessionStatus.COMPLETED)
             container.session_manager._persist()
+
+            # 检查用户是否有调整操作，决定是否提示保存技能
+            adjustment_types = {"exclude", "include", "adjust_weight", "modify_report", "recheck"}
+            has_adjustments = any(
+                a.action_type in adjustment_types for a in session.action_log
+            )
+
             return jsonify(
                 {
                     "success": True,
                     "session_id": session.session_id,
                     "line_name": session.line_name,
                     "status": session.status.value,
+                    "suggest_save_skill": has_adjustments,
                 }
             )
         except Exception as e:
@@ -568,11 +576,15 @@ def create_app() -> Flask:
 
     @app.route("/api/skills", methods=["GET"])
     def list_skills():
-        """获取所有技能文件"""
+        """获取所有技能文件（隐藏 report_modifier — 运行时内部技能，不用于诊断策略）"""
         skill_names = container.skill_loader.list_skills()
         skills = []
         for name in skill_names:
             try:
+                # report_modifier 是运行时报告修改技能，不在策略管理面板展示
+                if name == "report_modifier":
+                    continue
+
                 content, _ = container.skill_loader.load(name)
                 # 解析第一行标题作为描述
                 description = ""
@@ -716,49 +728,24 @@ def create_app() -> Flask:
 
     @app.route("/api/sessions/<id>/skill-summary", methods=["GET"])
     def generate_skill_summary(id: str):
-        """生成技能摘要（基于会话操作历史）"""
+        """生成技能摘要（基于会话操作历史，代码层构建完整 Agent Skill）"""
         try:
             session = container.session_manager.get(id)
         except Exception as e:
             return jsonify({"error": str(e)}), 404
 
-        excluded = set()
-        included = set()
-        weight_changes = {}
-        report_modifications = []
+        # 使用 SaveSkillCommand 的代码层构建逻辑生成完整 Skill
+        from src.application.commands.save_skill import SaveSkillCommand
 
-        for action in session.action_log:
-            t = action.action_type
-            params = action.parameters
-            if t == "exclude":
-                excluded.add(params.get("tool_name", ""))
-            elif t == "include":
-                included.add(params.get("tool_name", ""))
-            elif t == "adjust_weight":
-                weight_changes[params.get("tool_name", "")] = params.get("weight", 0)
-            elif t == "modify_report":
-                report_modifications.append(params.get("description", ""))
-
-        final_excluded = excluded - included
-
-        content = f"""# {session.line_name} 诊断策略
-
-## 描述
-基于 {session.line_name} 的诊断经验自动生成的策略模板。
-适用于类似故障场景的输电线路诊断。
-
-## 默认排除的诊断工具
-{chr(10).join(f"- {t}" for t in final_excluded) or "无"}
-
-## 默认权重调整
-{chr(10).join(f"- {t}: {v}" for t, v in weight_changes.items()) or "无"}
-
-## 报告模板修改
-{chr(10).join(f"- {m}" for m in report_modifications) or "无"}
-
-## 使用说明
-激活此技能后，新会话将自动应用上述配置。
-"""
+        cmd = SaveSkillCommand(
+            llm_service=container.llm_service,
+            session_manager=container.session_manager,
+            state_machine=container.state_machine,
+            skill_loader=container.skill_loader,
+            skills_dir=container.skill_loader._skills_dir,
+        )
+        config = cmd._build_skill_config(session, f"{session.line_name}_策略")
+        content = cmd._build_skill_markdown(config)
         suggested_name = f"{session.line_name}_策略"
         return jsonify({"content": content, "suggested_name": suggested_name})
 

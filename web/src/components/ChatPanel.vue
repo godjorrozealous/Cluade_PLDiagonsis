@@ -41,6 +41,37 @@ watch(() => store.activeSessionId, () => {
   reportExpanded.value = {}
 })
 
+// 自动展开修改报告后的诊断卡片
+watch(() => store.messages, (newMessages, oldMessages) => {
+  const oldLen = oldMessages?.length ?? 0
+  if (newMessages.length > oldLen) {
+    const lastMsg = newMessages[newMessages.length - 1]
+    if (
+      lastMsg.role === 'assistant'
+      && lastMsg.summary
+      && lastMsg.report
+      && lastMsg.eventType === 'complete'
+      && lastMsg.content?.includes('修改')
+    ) {
+      reportExpanded.value[lastMsg.id] = true
+      scrollToBottom()
+    }
+  }
+}, { deep: true })
+
+// 完成诊断后自动滚动到底部，确保用户看到 completion review 面板
+watch(showCompletionReview, async (visible) => {
+  if (visible) {
+    await nextTick()
+    if (listRef.value) {
+      listRef.value.scrollTo({
+        top: listRef.value.scrollHeight,
+        behavior: 'smooth',
+      })
+    }
+  }
+})
+
 function handleSend() {
   if (!input.value.trim() || store.isLoading) return
   store.postMessage(input.value)
@@ -61,11 +92,16 @@ function bubbleClass(role: string, eventType?: string): string {
   return 'bubble-assistant'
 }
 
-function handleCompleteDiagnosis() {
+async function handleCompleteDiagnosis() {
   const sessionId = store.activeSessionId
   if (!sessionId) return
   reviewSessionId.value = sessionId
-  showCompletionReview.value = true
+
+  const data = await store.markSessionComplete()
+  if (data?.suggest_save_skill) {
+    showCompletionReview.value = true
+  }
+  // 如果无调整操作，markSessionComplete 已将会话标记为 completed，无需显示面板
 }
 
 async function handleSaveSkillFromReview() {
@@ -686,7 +722,7 @@ function submitModifyReport() {
 .action-panel {
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border-subtle);
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .action-panel-title {

@@ -299,10 +299,34 @@ def save_strategy_command(tmp_path: Path) -> SaveSkillCommand:
     mock_state_machine = MagicMock()
     mock_skill_loader = MagicMock()
     mock_state_machine.can_execute.return_value = True
-    mock_llm.chat.return_value = "# 测试技能\n"
+    # Create base skill file for the command to read
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    base_skill = skills_dir / "comprehensive_diagnosis.md"
+    base_skill.write_text(
+        "---\n"
+        "name: comprehensive_diagnosis\n"
+        "description: base skill\n"
+        "---\n\n"
+        "# 输电线路综合诊断\n\n"
+        "## 核心算法：加权置信度\n\n"
+        "加权置信度 = tool_confidence × tool_weight\n\n"
+        "## 工具权重配置\n"
+        "```yaml\n"
+        "weights:\n"
+        "  LightningDiagnosisTool: 1.0\n"
+        "  WindDiagnosisTool: 0.8\n"
+        "```\n\n"
+        "## 工具调用策略\n\n"
+        "| Tool | Weight | Call Condition |\n"
+        "|------|--------|---------------|\n"
+        "| LightningDiagnosisTool | 1.0 | Always call |\n"
+        "| WindDiagnosisTool | 0.8 | Always call |\n",
+        encoding="utf-8",
+    )
     return SaveSkillCommand(
         mock_llm, mock_session_manager, mock_state_machine, mock_skill_loader,
-        skills_dir=tmp_path / "skills",
+        skills_dir=skills_dir,
     )
 
 
@@ -366,15 +390,81 @@ async def test_save_strategy_invalid_state(save_strategy_command: SaveSkillComma
 
 
 @pytest.mark.asyncio
-async def test_save_skill_llm_failure(save_strategy_command: SaveSkillCommand) -> None:
-    """save_skill yields error when LLM fails."""
-    save_strategy_command.llm.chat.side_effect = Exception("LLM error")
-    session = DiagnosisSession(session_id="s1", line_name="京西线", status=SessionStatus.MODIFYING)
+async def test_save_skill_contains_complete_rules(save_strategy_command: SaveSkillCommand) -> None:
+    """Generated skill must be self-contained: base body + modifications."""
+    session = DiagnosisSession(session_id="s1", line_name="哈哈线", status=SessionStatus.MODIFYING)
+    session.active_weights = {"LightningDiagnosisTool": 1.0, "WindDiagnosisTool": 0.8}
+    session.excluded_tools = ["LightningDiagnosisTool"]
+    session.action_log.append(UserAction(action_type="exclude", parameters={"tool_name": "LightningDiagnosisTool"}))
+    session.action_log.append(UserAction(action_type="modify_report", parameters={"instruction": "删除第三章"}))
+    session.action_log.append(UserAction(action_type="modify_report", parameters={"instruction": "按照模板调整报告"}))
     ctx = _make_context(session)
 
     events = [e async for e in save_strategy_command.execute(ctx)]
 
-    assert any(e.event_type == EventType.ERROR for e in events)
+    # Verify no LLM call was made (code-level build)
+    save_strategy_command.llm.chat.assert_not_called()
+
+    # Verify file content
+    skill_file = save_strategy_command.skills_dir / "skill_20260101_000000.md"
+    # The auto-generated name uses current timestamp, find the actual file
+    skill_files = list(save_strategy_command.skills_dir.glob("*.md"))
+    # Filter out comprehensive_diagnosis.md
+    generated_files = [f for f in skill_files if f.name != "comprehensive_diagnosis.md"]
+    assert len(generated_files) == 1
+    content = generated_files[0].read_text(encoding="utf-8")
+
+    # Must contain YAML frontmatter
+    assert content.startswith("---")
+    assert "name:" in content
+    assert "description:" in content
+    assert "USE THIS SKILL when" in content
+    assert "哈哈线" in content
+
+    # Must contain complete base body (not truncated)
+    assert "# 输电线路综合诊断" in content
+    assert "## 核心算法：加权置信度" in content
+    assert "加权置信度 = tool_confidence × tool_weight" in content
+    assert "## 工具调用策略" in content
+
+    # Excluded tool must be marked SKIP in the strategy table
+    assert "SKIP" in content
+    assert "LightningDiagnosisTool" in content
+
+    # Report modification rules must be present
+    assert "# 基于本次诊断会话的个性化优化" in content
+    assert "删除第三章" in content
+    assert "按照模板调整报告" in content
+    assert "## 报告撰写规则（必须遵循）" in content
+
+
+@pytest.mark.asyncio
+async def test_save_skill_without_base_file(tmp_path: Path) -> None:
+    """save_skill works even when comprehensive_diagnosis.md is missing."""
+    mock_llm = AsyncMock()
+    mock_session_manager = MagicMock()
+    mock_state_machine = MagicMock()
+    mock_skill_loader = MagicMock()
+    mock_state_machine.can_execute.return_value = True
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    # No comprehensive_diagnosis.md created
+    cmd = SaveSkillCommand(
+        mock_llm, mock_session_manager, mock_state_machine, mock_skill_loader,
+        skills_dir=skills_dir,
+    )
+    session = DiagnosisSession(session_id="s1", line_name="京西线", status=SessionStatus.MODIFYING)
+    ctx = _make_context(session)
+
+    events = [e async for e in cmd.execute(ctx)]
+
+    assert events[-1].event_type == EventType.COMPLETE
+    # Should still generate frontmatter + personalized section
+    skill_files = [f for f in skills_dir.glob("*.md") if f.name != "comprehensive_diagnosis.md"]
+    assert len(skill_files) == 1
+    content = skill_files[0].read_text(encoding="utf-8")
+    assert "---" in content
+    assert "京西线" in content
 
 
 # ============================================================================

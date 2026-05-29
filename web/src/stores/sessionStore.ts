@@ -237,7 +237,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function markSessionComplete() {
     const sessionId = activeSessionId.value
-    if (!sessionId) return
+    if (!sessionId) return null
     try {
       error.value = null
       const data = await completeSession(sessionId)
@@ -247,8 +247,10 @@ export const useSessionStore = defineStore('session', () => {
           sessions.value[idx] = { ...sessions.value[idx], status: 'completed' }
         }
       }
+      return data
     } catch (err) {
       error.value = (err as Error).message
+      return null
     }
   }
 

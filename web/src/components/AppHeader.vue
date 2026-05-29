@@ -17,24 +17,30 @@ const isBreathing = computed(() => {
   const status = store.activeSession?.status
   return status === 'diagnosing' || status === 'modifying'
 })
+
+const statusLabel = computed(() => {
+  const map: Record<string, string> = {
+    pending: '就绪',
+    diagnosing: '诊断中',
+    modifying: '修改中',
+    completed: '已完成',
+    excluded: '已排除',
+    rechecking: '复查中',
+  }
+  return map[store.activeSession?.status || ''] || '就绪'
+})
 </script>
 
 <template>
   <header class="app-header">
-    <div class="header-brand">
-      <span class="header-icon">&#9889;</span>
-      <div>
-        <div class="header-title">输电线路故障综合诊断智能体</div>
-        <div class="header-subtitle">Power Line Fault Comprehensive Diagnosis Agent</div>
-      </div>
-    </div>
+    <div class="header-title">输电线路故障诊断智能体</div>
     <div class="status-indicator">
       <span
         class="status-dot"
         :class="{ breathing: isBreathing }"
         :style="{ background: statusColor, color: statusColor }"
       />
-      <span>{{ store.activeSession?.status || '就绪' }}</span>
+      <span>{{ statusLabel }}</span>
     </div>
   </header>
 </template>
@@ -44,39 +50,13 @@ const isBreathing = computed(() => {
   height: 56px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: 0 1.5rem;
-  background: rgba(6, 11, 20, 0.95);
-  backdrop-filter: blur(12px);
+  background: var(--bg-panel);
   border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
   z-index: 100;
-}
-
-.app-header::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg,
-    transparent 0%, var(--color-primary) 20%,
-    var(--color-accent) 50%, var(--color-primary) 80%, transparent 100%
-  );
-  opacity: 0.6;
-}
-
-.header-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.header-icon {
-  font-size: 1.25rem;
-  animation: pulse-glow 3s ease-in-out infinite;
 }
 
 .header-title {
@@ -85,17 +65,12 @@ const isBreathing = computed(() => {
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--text-primary);
-}
-
-.header-subtitle {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-align: center;
 }
 
 .status-indicator {
+  position: absolute;
+  right: 1.5rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;

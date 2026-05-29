@@ -115,7 +115,7 @@ export function clearSessions() {
 }
 
 export function completeSession(sessionId: string) {
-  return request<{ success: boolean; session_id: string; line_name: string; status: string }>(
+  return request<{ success: boolean; session_id: string; line_name: string; status: string; suggest_save_skill?: boolean }>(
     `/api/sessions/${sessionId}/complete`,
     { method: 'POST' }
   )

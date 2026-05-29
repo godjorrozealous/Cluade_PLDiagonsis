@@ -112,10 +112,31 @@ class ModifyReportCommand(Command):
             f"before={len(current_report)}, after={len(modified_report)}"
         )
 
+        # 构建 summary 供前端渲染诊断卡片
+        primary = session.current_summary.primary_diagnosis if session.current_summary else None
+        summary = {
+            "fault_type": primary.fault_type if primary else "未知",
+            "confidence": primary.confidence if primary else 0.0,
+            "line_name": session.line_name or "",
+            "voltage_level": session.fault_context.additional_info.get("voltage_level", "") if session.fault_context else "",
+            "fault_time": session.fault_context.fault_time.isoformat() if session.fault_context and session.fault_context.fault_time else "",
+            "action_log": [
+                {
+                    "action_type": a.action_type,
+                    "tool_name": a.parameters.get("tool_name", ""),
+                    "description": a.parameters.get("description", ""),
+                    "weight": a.parameters.get("weight"),
+                }
+                for a in session.action_log
+            ],
+        }
+
         yield Event.complete(
             session.session_id,
             {
                 "message": "报告已按您的要求修改",
                 "report": modified_report,
+                "summary": summary,
+                "status": "modifying",
             },
         )

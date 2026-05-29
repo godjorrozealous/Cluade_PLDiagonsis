@@ -48,7 +48,7 @@ class Container:
         self.diagnosis_planner = DiagnosisPlanner(self.llm_service)
         self.tool_executor = ToolExecutor(self.tool_registry)
         self.template_registry = TemplateRegistry()
-        self.report_composer = ReportComposer(self.llm_service)
+        self.report_composer = ReportComposer(self.llm_service, self.skill_loader)
 
     def _merge_yaml_config(self) -> None:
         """合并 config.yaml 中的配置（环境变量优先）"""

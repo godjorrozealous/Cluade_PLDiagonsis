@@ -47,7 +47,13 @@ class CompleteDiagnosisCommand(Command):
             {"status": SessionStatus.COMPLETED.value},
         )
 
-        logger.info(f"诊断完成: {session.session_id}")
+        # 检查用户是否有调整操作（排除/包含/权重调整/报告修改/复查）
+        adjustment_types = {"exclude", "include", "adjust_weight", "modify_report", "recheck"}
+        has_adjustments = any(
+            a.action_type in adjustment_types for a in session.action_log
+        )
+
+        logger.info(f"诊断完成: {session.session_id}, 有调整: {has_adjustments}")
 
         yield Event.complete(
             session.session_id,
@@ -55,6 +61,6 @@ class CompleteDiagnosisCommand(Command):
                 "message": "诊断已完成",
                 "status": session.status.value,
                 "line_name": session.line_name,
-                "suggest_save_skill": True,
+                "suggest_save_skill": has_adjustments,
             },
         )

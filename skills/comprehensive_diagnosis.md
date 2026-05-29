@@ -1,26 +1,28 @@
 ---
 name: comprehensive_diagnosis
 description: |
-  输电线路跳闸故障综合诊断专家。当用户描述输电线路故障、跳闸、
-  线路异常、杆塔问题、雷击、覆冰、风偏、鸟害等情况时，必须使用此技能。
-  即使用户没有明确说"诊断"，只要涉及线路名称+故障/异常/跳闸/闪络/
-  接地/短路等关键词，都应自动触发此技能。
-  适用于 220kV/500kV/750kV/1000kV 等各电压等级输电线路。
+  输电线路跳闸故障综合诊断专家。
+  USE THIS SKILL when the user describes power transmission line faults,
+  tripping events, line abnormalities, tower problems, lightning strikes,
+  icing, wind deflection, bird damage, or any weather-related line issues.
+  ALWAYS activate when the input contains line name + fault/trip/abnormal/
+  flashover/ground/short-circuit keywords, even if the user does not say
+  "diagnose" explicitly.
+  Applies to 220kV/500kV/750kV/1000kV transmission lines.
 ---
 
 # 输电线路综合诊断
 
 ## 核心算法：加权置信度
 
-所有工具返回的结果都有置信度（confidence，0~1 之间）。
-你必须按以下公式计算每个工具的加权置信度：
+All tool results include a confidence score (0~1). Compute weighted confidence:
 
 ```
-加权置信度 = 工具返回的 confidence × 该工具的 weight
+加权置信度 = tool_confidence × tool_weight
 ```
 
-最终按加权置信度从高到低排序，最高者对应的故障类型为主要原因。
-如果两个工具加权置信度差距 < 0.1，则列为并列主要原因。
+Sort by weighted confidence descending. The highest is the primary cause.
+If the gap between top two is < 0.1, list as co-primary causes.
 
 ## 工具权重配置
 
@@ -34,32 +36,32 @@ weights:
 
 ## 工具调用策略
 
-| 工具 | 权重 | 调用条件 |
-|------|------|---------|
-| LightningDiagnosisTool | 1.0 | 始终调用 |
-| IcingDiagnosisTool | 0.9 | 气温 ≤ 5°C 或冬季时调用，否则主动跳过 |
-| WindDiagnosisTool | 0.8 | 始终调用 |
-| BirdDamageDiagnosisTool | 0.6 | 始终调用 |
+| Tool | Weight | Call Condition |
+|------|--------|---------------|
+| LightningDiagnosisTool | 1.0 | Always call |
+| IcingDiagnosisTool | 0.9 | Call when temp ≤ 5°C or winter; otherwise skip |
+| WindDiagnosisTool | 0.8 | Always call |
+| BirdDamageDiagnosisTool | 0.6 | Always call |
 
 ## 诊断流程
 
-1. **信息提取**：从用户描述中提取线路名称、杆塔号、故障时间（精确到毫秒）
-2. **天气判断**：获取当前季节和天气，判断覆冰工具是否适用
-3. **并行诊断**：同时调用所有符合条件的工具
-4. **加权计算**：对每个工具结果计算 加权置信度 = confidence × weight
-5. **排序判断**：按加权置信度降序排列，最高者为主要原因
-6. **报告生成**：按激活模板的章节结构组织输出
+1. **Extract info**: Parse line name, tower number, fault time (millisecond precision)
+2. **Weather check**: Determine season and weather, decide if icing tool applies
+3. **Parallel diagnosis**: Call all applicable tools simultaneously
+4. **Weighted compute**: Calculate weighted confidence = confidence × weight for each tool
+5. **Rank & judge**: Sort descending, highest is primary cause
+6. **Report**: Organize output by the active template chapter structure
 
-## 置信度等级划分
+## 置信度等级
 
-- HIGH（高置信度）：加权置信度 ≥ 0.7
-- MEDIUM（中置信度）：加权置信度 0.4 ~ 0.7
-- LOW（低置信度）：加权置信度 < 0.4
+- HIGH: weighted confidence ≥ 0.7
+- MEDIUM: weighted confidence 0.4 ~ 0.7
+- LOW: weighted confidence < 0.4
 
 ## 注意事项
 
-- 覆冰诊断仅在低温条件下有意义，夏季应主动跳过
-- 如多个工具指向同一故障类型，应合并证据提升置信度
-- 新增工具可用时，应提示用户是否纳入本次诊断
-- 故障时间必须精确到毫秒，格式为 YYYY-MM-DD HH:MM:SS.mmm
-- 报告结论中必须明确列出每个工具的加权置信度计算过程
+- Skip icing diagnosis in summer (no significance)
+- Merge evidence when multiple tools point to the same fault type
+- Prompt user when new tools are available
+- Fault time must be millisecond-precise: YYYY-MM-DD HH:MM:SS.mmm
+- Report conclusion must show weighted confidence calculation for each tool

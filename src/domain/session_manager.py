@@ -69,6 +69,17 @@ class SessionManager:
         )
         session.active_skill_name = self._default_skill_name
 
+        # 继承全局激活模板
+        try:
+            from src.domain.template_registry import TemplateRegistry
+
+            registry = TemplateRegistry()
+            active_template = registry.get_active()
+            if active_template:
+                session.active_template_name = active_template
+        except Exception:
+            pass  # 模板注册表失败不应阻塞会话创建
+
         # 从技能文件加载权重
         skill_weights = self._load_skill_weights(session.active_skill_name)
         if skill_weights:

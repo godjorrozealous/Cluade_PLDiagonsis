@@ -6,11 +6,11 @@ import { formatTime } from '@/utils/time'
 const store = useSessionStore()
 
 const props = defineProps<{
-  currentView: 'chat' | 'reports'
+  currentView: 'chat' | 'reports' | 'templates'
 }>()
 
 const emit = defineEmits<{
-  (e: 'switchView', view: 'chat' | 'reports'): void
+  (e: 'switchView', view: 'chat' | 'reports' | 'templates'): void
 }>()
 
 onMounted(() => {
@@ -50,6 +50,7 @@ function statusLabel(status: string): string {
 
 function handleSelect(session: import('@/types').DiagnosisSession) {
   if (session.status === 'completed') return
+  emit('switchView', 'chat')
   store.selectSession(session.session_id)
 }
 </script>
@@ -103,6 +104,13 @@ function handleSelect(session: import('@/types').DiagnosisSession) {
         @click="emit('switchView', 'reports')"
       >
         报告历史
+      </button>
+      <button
+        class="nav-link"
+        :class="{ active: props.currentView === 'templates' }"
+        @click="emit('switchView', 'templates')"
+      >
+        模板管理
       </button>
     </div>
 

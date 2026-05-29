@@ -456,7 +456,7 @@ onMounted(() => {
 .tm-preview-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 11, 20, 0.8);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;

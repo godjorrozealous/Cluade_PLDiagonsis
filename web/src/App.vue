@@ -7,10 +7,11 @@ import ChatPanel from '@/components/ChatPanel.vue'
 import ToolList from '@/components/ToolList.vue'
 import StrategyManager from '@/components/StrategyManager.vue'
 import ReportHistory from '@/components/ReportHistory.vue'
+import TemplateManager from '@/components/TemplateManager.vue'
 
-const currentView = ref<'chat' | 'reports'>('chat')
+const currentView = ref<'chat' | 'reports' | 'templates'>('chat')
 
-function switchView(view: 'chat' | 'reports') {
+function switchView(view: 'chat' | 'reports' | 'templates') {
   currentView.value = view
 }
 </script>
@@ -25,7 +26,8 @@ function switchView(view: 'chat' | 'reports') {
         <ToolList />
         <StrategyManager />
       </template>
-      <ReportHistory v-else />
+      <ReportHistory v-else-if="currentView === 'reports'" />
+      <TemplateManager v-else-if="currentView === 'templates'" />
     </div>
   </div>
 </template>
